@@ -9,6 +9,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   ListOrdered,
+  LogOut,
   Menu,
   Settings,
   X,
@@ -16,6 +17,8 @@ import {
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { useOS } from "@/state/os-store";
+import { useAuth } from "@/auth/AuthProvider";
+import { ROLE_LABELS } from "@/auth/backend";
 
 const NAV = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -32,8 +35,9 @@ const NAV = [
 export function AppSidebar() {
   const [open, setOpen] = React.useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { data, status } = useOS();
-  const pendingApprovals = data.approvals.filter((a) => a.status === "PENDING").length + data.tickets.filter((t) => t.approvalState === "PENDING").length;
+  const { data, status, user } = useOS();
+  const auth = useAuth();
+  const pendingApprovals = data.approvals.filter((a) => a.status === "PENDING").length + data.tickets.filter((t) => t.approvalState === "PENDING").length + data.jobApprovals.filter((a) => a.status === "PENDING").length;
   const knowledgeCandidates = data.knowledgeItems.filter((k) => k.status === "CANDIDATE").length;
 
   React.useEffect(() => setOpen(false), [pathname]);
@@ -65,11 +69,17 @@ export function AppSidebar() {
   const footer = (
     <div className="border-t border-side-border px-3 py-3">
       <div className="flex items-center gap-2.5">
-        <div className="flex size-7 items-center justify-center rounded-md bg-side-2 text-[11px] font-semibold text-side-ink">PL</div>
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-medium text-side-ink">Production Lead</div>
-          <div className="truncate text-[11px] text-side-muted">Creative Touch</div>
+        <div className="flex size-7 items-center justify-center rounded-md bg-side-2 text-[11px] font-semibold text-side-ink">{initials(user.displayName)}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-medium text-side-ink">{user.displayName}</div>
+          <div className="truncate text-[11px] text-side-muted">
+            {ROLE_LABELS[user.role]}
+            {auth.kind === "local" ? " · local mode" : ""}
+          </div>
         </div>
+        <button aria-label="Sign out" title="Sign out" onClick={() => void auth.signOut()} className="rounded-md p-1.5 text-side-muted hover:bg-side-2 hover:text-side-ink">
+          <LogOut className="size-3.5" />
+        </button>
       </div>
       <div className="mt-3 flex items-center justify-between rounded-md bg-side-2 px-2.5 py-1.5 text-[11px]">
         <span className="flex items-center gap-1.5 text-side-muted">
@@ -79,7 +89,9 @@ export function AppSidebar() {
           <span className="size-1.5 rounded-full bg-ok" /> Operational
         </span>
       </div>
-      <div className="mt-1.5 px-0.5 text-[10px] text-side-muted">Store: {status.repositoryKind === "supabase" ? "Supabase" : "in-memory · Supabase not connected"}</div>
+      <div className="mt-1.5 px-0.5 text-[10px] text-side-muted">
+        Store: {status.repositoryKind === "supabase" ? "Supabase" : "in-memory"} · Gateway: {status.gatewayKind === "http" ? "server" : "embedded"}
+      </div>
     </div>
   );
 
@@ -114,6 +126,11 @@ export function AppSidebar() {
       </aside>
     </>
   );
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "CT";
 }
 
 function Brand() {

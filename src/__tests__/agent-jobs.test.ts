@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 import { seedData } from "@/data/seed";
 import { ModelRouter } from "@/ai/router";
 import { ProviderRegistry } from "@/ai/registry";
-import { ClaudeProvider } from "@/ai/providers/claude";
-import { OpenAIProvider } from "@/ai/providers/openai";
-import { GeminiProvider } from "@/ai/providers/gemini";
+import { StubProvider } from "@/ai/providers/stub";
 import { approveJobOutput, buildProviderRequest, cancelJob, canTransitionJob, createJob, createJobForTicket, executeJob, requestJobRevision, startJob, transitionJob } from "@/services/agent-jobs";
 
 const base = () => structuredClone(seedData);
-const router = () => new ModelRouter({ registry: new ProviderRegistry([new ClaudeProvider(), new OpenAIProvider(), new GeminiProvider()]) });
+const router = () => new ModelRouter({ registry: new ProviderRegistry([new StubProvider({ id: "claude" }), new StubProvider({ id: "openai" }), new StubProvider({ id: "gemini" })]) });
 
 describe("agent job lifecycle", () => {
   it("creates a QUEUED job that inherits the agent's provider policy and permission level", () => {
@@ -94,10 +92,12 @@ describe("agent job lifecycle", () => {
     const d0 = base();
     const { data, job } = createJob(d0, { projectId: "proj_uproof", agentId: "agent_05", instructions: "Build header" });
     const req = buildProviderRequest(data, job);
-    expect(req.knowledge.every((k) => k.status === "APPROVED")).toBe(true);
-    expect(req.knowledge.some((k) => k.scope === "DOCTRINE")).toBe(true);
+    const all = [...req.approvedKnowledge.doctrine, ...req.approvedKnowledge.agency, ...req.approvedKnowledge.project, ...req.approvedKnowledge.task];
+    expect(req.approvedKnowledge.doctrine.length).toBe(4);
     // U-Proof lesson candidates are NOT in force
-    expect(req.knowledge.some((k) => k.id.startsWith("kn_up_"))).toBe(false);
+    expect(all.some((k) => k.id.startsWith("kn_up_"))).toBe(false);
+    expect(req.systemContext).toContain("DOCTRINE (permanent Creative Touch rules)");
+    expect(req.systemContext).toContain("PROJECT FACTS (this client/project only): none");
     expect(req.systemContext).toContain("WordPress / Elementor Builder");
     expect(req.permissionLevel).toBe("AMBER");
   });

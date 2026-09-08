@@ -26,16 +26,18 @@ import type {
   TicketApprovalState,
   TicketStatus,
 } from "@/data/types";
-import type { AgentProviderPolicy, KnowledgeScope, QARun } from "@/data/types";
+import type { ActorRef, AgentProviderPolicy, AuthUser, KnowledgeScope, QARun } from "@/data/types";
 import { PHASES, PROJECT_STATE_LABELS, STATE_PROGRESS, canTransition } from "@/data/state-machine";
 import { AGENT_IDS } from "@/data/seed";
 import { InMemoryRepository, type OSRepository, type RepositoryChoice } from "@/services/repository";
 import { createArtifact } from "@/services/artifacts";
-import { applyJobFailure, applyJobResult, approveJobOutput, buildProviderRequest, cancelJob, createJobForTicket, requestJobRevision, startJob } from "@/services/agent-jobs";
+import { applyGatewayRecords, approveJobOutput, cancelJob, createJobForTicket, requestJobRevision, startJob } from "@/services/agent-jobs";
+import { authorizeRedJob, checkPermission, decideJobApproval, effectiveLevel, requestJobApproval, type PermissionCheck } from "@/services/job-approvals";
 import { proposeLesson, reviewKnowledgeItem, type ProposeLessonInput, type ReviewDecision } from "@/services/knowledge";
-import { ModelRouter } from "@/ai/router";
-import { createDefaultRegistry, PROVIDER_LABELS } from "@/ai/registry";
-import type { RouterResult } from "@/ai/types";
+import { PROVIDER_LABELS } from "@/ai/registry";
+import type { GatewayClient } from "@/gateway/client";
+import { EmbeddedGatewayClient } from "@/gateway/client";
+import type { GatewayResponse } from "@/gateway/core";
 import { newId, nowIso } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -52,28 +54,47 @@ export interface NewProjectInput {
   notes?: string;
 }
 
+/** Every human-initiated action carries the signed-in user. Agent/system actors are plain strings. */
 type Action =
-  | { type: "CREATE_PROJECT"; input: NewProjectInput; ids: { clientId: string; projectId: string; ticketId: string } }
-  | { type: "TRANSITION_PROJECT"; projectId: string; to: ProjectState }
-  | { type: "SET_TICKET_STATUS"; ticketId: string; status: TicketStatus }
-  | { type: "SET_TICKET_APPROVAL"; ticketId: string; approval: TicketApprovalState }
-  | { type: "RUN_TICKET_START"; ticketId: string; jobId: string }
-  | { type: "RUN_TICKET_RESULT"; jobId: string; result: RouterResult | null; error: string | null }
-  | { type: "RUN_QA"; projectId: string; ticketId: string; qaRunId: string }
-  | { type: "CANCEL_JOB"; jobId: string; reason?: string }
-  | { type: "REVIEW_KNOWLEDGE"; itemId: string; decision: ReviewDecision; scope?: Exclude<KnowledgeScope, "TASK">; projectId?: string | null }
-  | { type: "PROPOSE_LESSON"; input: ProposeLessonInput }
-  | { type: "SET_AGENT_PROVIDER"; agentId: string; policy: Partial<AgentProviderPolicy> }
-  | { type: "DECIDE_APPROVAL"; approvalId: string; status: ApprovalStatus; notes?: string }
-  | { type: "TOGGLE_HOLD"; holdId: string }
-  | { type: "SET_QA_ITEM_STATUS"; qaItemId: string; status: QAItem["status"] }
-  | { type: "NOTE"; projectId: string | null; message: string };
+  | { type: "CREATE_PROJECT"; input: NewProjectInput; ids: { clientId: string; projectId: string; ticketId: string }; actor: AuthUser }
+  | { type: "TRANSITION_PROJECT"; projectId: string; to: ProjectState; actor: AuthUser }
+  | { type: "SET_TICKET_STATUS"; ticketId: string; status: TicketStatus; actor: AuthUser }
+  | { type: "SET_TICKET_APPROVAL"; ticketId: string; approval: TicketApprovalState; actor: AuthUser }
+  | { type: "RUN_TICKET_START"; ticketId: string; jobId: string; handoffId: string; actor: AuthUser }
+  | { type: "APPLY_EXECUTION"; jobId: string; response: GatewayResponse; actor: AuthUser }
+  | { type: "RUN_QA"; projectId: string; ticketId: string; qaRunId: string; actor: AuthUser }
+  | { type: "CANCEL_JOB"; jobId: string; reason?: string; actor: AuthUser }
+  | { type: "REVIEW_KNOWLEDGE"; itemId: string; decision: ReviewDecision; scope?: Exclude<KnowledgeScope, "TASK">; projectId?: string | null; actor: AuthUser }
+  | { type: "PROPOSE_LESSON"; input: ProposeLessonInput; actor: AuthUser }
+  | { type: "SET_AGENT_PROVIDER"; agentId: string; policy: Partial<AgentProviderPolicy>; actor: AuthUser }
+  | { type: "DECIDE_APPROVAL"; approvalId: string; status: ApprovalStatus; notes?: string; actor: AuthUser }
+  | { type: "DECIDE_JOB_APPROVAL"; approvalId: string; decision: "APPROVED" | "REJECTED"; note?: string; actor: AuthUser }
+  | { type: "AUTHORIZE_JOB"; jobId: string; actor: AuthUser }
+  | { type: "TOGGLE_HOLD"; holdId: string; actor: AuthUser }
+  | { type: "SET_QA_ITEM_STATUS"; qaItemId: string; status: QAItem["status"]; actor: AuthUser }
+  | { type: "NOTE"; projectId: string | null; message: string; actor: AuthUser };
 
-const ACTOR = "Production Lead";
+function ref(user: AuthUser): ActorRef {
+  return { id: user.id, name: user.displayName };
+}
 
-function pushActivity(data: OSData, projectId: string | null, kind: ActivityKind, message: string, ref?: string, actor = ACTOR): ActivityEvent[] {
+function pushActivity(data: OSData, projectId: string | null, kind: ActivityKind, message: string, ref?: string, actor: ActorRef | string = "System"): ActivityEvent[] {
   const order = data.activity.reduce((m, a) => Math.max(m, a.order), 0) + 1;
-  return [...data.activity, { id: newId("act"), projectId, kind, ref, message, actor, at: nowIso(), order }];
+  const name = typeof actor === "string" ? actor : actor.name;
+  const actorId = typeof actor === "string" ? null : actor.id;
+  return [...data.activity, { id: newId("act"), projectId, kind, ref, message, actor: name, actorId, at: nowIso(), order }];
+}
+
+/** Which job (if any) is the runnable one for a ticket, and whether the current user may run it now. */
+export function ticketRunState(data: OSData, ticketId: string, user: AuthUser): { job: OSData["agentJobs"][number] | null; check: PermissionCheck | null; inFlight: boolean } {
+  const ticket = data.tickets.find((t) => t.id === ticketId);
+  if (!ticket) return { job: null, check: null, inFlight: false };
+  const inFlight = data.agentJobs.some((j) => j.ticketId === ticket.id && (j.status === "RUNNING" || j.status === "WAITING_APPROVAL"));
+  const job = data.agentJobs.find((j) => j.ticketId === ticket.id && j.status === "QUEUED") ?? null;
+  const agent = data.agents.find((a) => a.id === ticket.agentId);
+  if (!job || !agent) return { job, check: null, inFlight };
+  const check = checkPermission({ level: effectiveLevel(job.permissionLevel, agent.permissionLevel), user, job, approvals: data.jobApprovals });
+  return { job, check, inFlight };
 }
 
 function touchProject(projects: Project[], projectId: string, patch: Partial<Project> = {}): Project[] {
@@ -151,11 +172,11 @@ function reducer(data: OSData, action: Action): OSData {
         tickets: [...data.tickets, ticket],
         approvals: [
           ...data.approvals,
-          { id: newId("appr"), projectId: project.id, gate: "STRATEGY", requestedBy: "Orchestrator", status: "PENDING", decidedAt: null, createdAt: now },
+          { id: newId("appr"), projectId: project.id, gate: "STRATEGY", requestedBy: "Orchestrator", status: "PENDING", decidedById: null, decidedAt: null, createdAt: now },
         ],
       };
       next = createArtifact(next, { projectId: project.id, type: "project_brief", title: "Project Brief", createdByAgentId: AGENT_IDS.ORCH, status: "FINAL", summary: input.primaryGoal, at: now }).data;
-      next = { ...next, activity: pushActivity(next, project.id, "PROJECT_CREATED", `Project created — ${project.name} (${platformSummary})`) };
+      next = { ...next, activity: pushActivity(next, project.id, "PROJECT_CREATED", `Project created — ${project.name} (${platformSummary})`, undefined, ref(action.actor)) };
       next = { ...next, activity: pushActivity(next, project.id, "TICKET_CREATED", `${code} created — Research & Discovery`, code, "Orchestrator") };
       return next;
     }
@@ -170,7 +191,7 @@ function reducer(data: OSData, action: Action): OSData {
         progress,
       });
       const next = { ...data, projects };
-      return { ...next, activity: pushActivity(next, project.id, "STATE_CHANGED", `State changed ${PROJECT_STATE_LABELS[project.state]} → ${PROJECT_STATE_LABELS[action.to]}`) };
+      return { ...next, activity: pushActivity(next, project.id, "STATE_CHANGED", `State changed ${PROJECT_STATE_LABELS[project.state]} → ${PROJECT_STATE_LABELS[action.to]}`, undefined, ref(action.actor)) };
     }
 
     case "SET_TICKET_STATUS": {
@@ -184,7 +205,7 @@ function reducer(data: OSData, action: Action): OSData {
       // Keep agent status coherent with ticket status.
       next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, action.status) };
       const kind: ActivityKind = action.status === "COMPLETE" ? "TICKET_COMPLETED" : "TICKET_STATUS";
-      return { ...next, activity: pushActivity(next, ticket.projectId, kind, `${ticket.code} → ${action.status === "COMPLETE" ? "completed" : action.status.toLowerCase()} — ${ticket.title}`, ticket.code) };
+      return { ...next, activity: pushActivity(next, ticket.projectId, kind, `${ticket.code} → ${action.status === "COMPLETE" ? "completed" : action.status.toLowerCase()} — ${ticket.title}`, ticket.code, ref(action.actor)) };
     }
 
     case "SET_TICKET_APPROVAL": {
@@ -208,48 +229,78 @@ function reducer(data: OSData, action: Action): OSData {
       const job = [...next.agentJobs].reverse().find((j) => j.ticketId === ticket.id && j.status === "WAITING_APPROVAL");
       if (job && action.approval === "APPROVED") {
         next = approveJobOutput(next, job.id).data;
-        next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `Job output approved — artifact finalised`, ticket.code) };
+        next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `Job output approved — artifact finalised`, ticket.code, ref(action.actor)) };
       } else if (job && action.approval === "NEEDS_REVISION") {
         next = requestJobRevision(next, job.id, "Needs revision (human review)").data;
-        next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `Job re-queued for revision`, ticket.code) };
+        next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `Job re-queued for revision`, ticket.code, ref(action.actor)) };
       }
       const msg = action.approval === "APPROVED" ? "approved" : action.approval === "NEEDS_REVISION" ? "sent back — needs revision" : "awaiting approval";
-      return { ...next, activity: pushActivity(next, ticket.projectId, "APPROVAL", `${ticket.code} ${msg} — ${ticket.title}`, ticket.code) };
+      return { ...next, activity: pushActivity(next, ticket.projectId, "APPROVAL", `${ticket.code} ${msg} — ${ticket.title}`, ticket.code, ref(action.actor)) };
     }
 
     case "RUN_TICKET_START": {
-      // Real job model, stub intelligence: a job is created (or an existing QUEUED job re-used),
-      // routed through the ModelRouter, and its output becomes a versioned artifact for human review.
+      // Creates (or re-uses) the ticket's job, then either starts it — if the permission tier allows —
+      // or records the approval/authorization that is still needed. The gateway re-checks server-side.
       const ticket = data.tickets.find((t) => t.id === action.ticketId);
       if (!ticket) return data;
-      // One job in flight per ticket: a second click while RUNNING / WAITING_APPROVAL is a no-op.
       if (data.agentJobs.some((j) => j.ticketId === ticket.id && (j.status === "RUNNING" || j.status === "WAITING_APPROVAL"))) return data;
       const now = nowIso();
       let next: OSData = data;
       const existing = next.agentJobs.find((j) => j.ticketId === ticket.id && j.status === "QUEUED");
-      // The action pre-computed its provider request for `action.jobId`; if the store disagrees, do nothing.
       if (existing && existing.id !== action.jobId) return data;
       const jobId = action.jobId;
-      if (!existing) next = createJobForTicket(next, ticket, { id: action.jobId, at: now }).data;
-      next = startJob(next, jobId).data;
+      if (!existing) next = createJobForTicket(next, ticket, { id: action.jobId, handoffId: action.handoffId, at: now, requestedById: action.actor.id }).data;
       const job = next.agentJobs.find((j) => j.id === jobId)!;
+      const agent = next.agents.find((a) => a.id === job.agentId)!;
+      const level = effectiveLevel(job.permissionLevel, agent.permissionLevel);
+      const check = checkPermission({ level, user: action.actor, job, approvals: next.jobApprovals, now });
+      if (check.outcome === "denied") {
+        if (level === "AMBER" && action.actor.role !== "VIEWER") {
+          const r = requestJobApproval(next, job, action.actor, `${agent.shortCode} ${agent.name}`, { at: now });
+          next = r.data;
+          if (r.created) next = { ...next, activity: pushActivity(next, ticket.projectId, "APPROVAL", `${ticket.code} needs AMBER approval before it can run — requested`, ticket.code, ref(action.actor)) };
+        } else {
+          next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `${ticket.code} cannot run: ${check.reason}`, ticket.code, ref(action.actor)) };
+        }
+        return { ...next, projects: touchProject(next.projects, ticket.projectId, { nextAction: level === "RED" ? `Authorize ${ticket.code} (RED) in Approvals` : level === "AMBER" ? `Approve ${ticket.code} (AMBER) in Approvals` : ticket.title }) };
+      }
+      next = startJob(next, jobId).data;
       next = { ...next, tickets: next.tickets.map((t) => (t.id === ticket.id ? { ...t, status: "BUILDING" as TicketStatus, updatedAt: now } : t)), projects: touchProject(next.projects, ticket.projectId, { nextAction: `Wait for ${ticket.code} to finish` }) };
       next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, "BUILDING") };
-      next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `${ticket.code} job started — preferred provider ${PROVIDER_LABELS[job.preferredProvider]}${job.inputArtifactIds.length ? ` · ${job.inputArtifactIds.length} input artifact(s)` : ""}`, ticket.code, "Orchestrator") };
+      next = { ...next, activity: pushActivity(next, ticket.projectId, "JOB", `${ticket.code} job started (${level}) — preferred provider ${PROVIDER_LABELS[job.preferredProvider]}${job.inputArtifactIds.length ? ` · ${job.inputArtifactIds.length} input artifact(s)` : ""}`, ticket.code, ref(action.actor)) };
       return next;
     }
 
-    case "RUN_TICKET_RESULT": {
+    case "APPLY_EXECUTION": {
+      // Mirror what the gateway produced (it already persisted server-side in Supabase mode).
       const job = data.agentJobs.find((j) => j.id === action.jobId);
-      if (!job || job.status !== "RUNNING") return data;
+      if (!job) return data;
       const ticket = job.ticketId ? data.tickets.find((t) => t.id === job.ticketId) : null;
       const now = nowIso();
-      let next: OSData = data;
-      if (action.result) {
-        const result = action.result;
-        const applied = applyJobResult(next, job.id, result, { artifactTitle: ticket ? `${ticket.title} — ${job.requiredOutputSchema.split("@")[0].replace(/_/g, " ")}` : undefined });
-        next = applied.data;
-        const artifact = next.artifacts.find((a) => a.id === applied.artifactId);
+      const res = action.response;
+      if (!res.ok) {
+        // Transport failure or 5xx: the server may still have completed. Leave the job as it is and say so.
+        if (res.code === "internal" && (res.status === 0 || res.status >= 500)) {
+          return { ...data, activity: pushActivity(data, job.projectId, "JOB", `Gateway unreachable for ${ticket?.code ?? "job"} (${res.message}). The job may still complete server-side — reload to see its state.`, ticket?.code, "Execution gateway") };
+        }
+        // Gateway refused (auth / permission / state). Job goes back to QUEUED so it can be retried once fixed.
+        let next: OSData = job.status === "RUNNING" ? { ...data, agentJobs: data.agentJobs.map((j) => (j.id === job.id ? { ...j, status: "QUEUED" as const, error: res.message, updatedAt: now } : j)) } : data;
+        if (ticket && ticket.status === "BUILDING") {
+          next = { ...next, tickets: next.tickets.map((t) => (t.id === ticket.id ? { ...t, status: "READY" as TicketStatus, updatedAt: now } : t)) };
+          next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, "READY") };
+        }
+        return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Gateway refused ${ticket?.code ?? "job"}: ${res.message}`, ticket?.code, "Execution gateway") };
+      }
+      if (job.status !== "RUNNING") {
+        // Cancelled (or otherwise moved on) while the gateway was executing: keep the evidence, not the state change.
+        const evidenceOnly = { ...res.records, job, handoff: null };
+        const next = applyGatewayRecords(data, evidenceOnly);
+        return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Execution result for ${ticket?.code ?? "job"} arrived after it was ${job.status.toLowerCase()} — runs and logs kept, state unchanged`, ticket?.code, "Execution gateway") };
+      }
+      let next = applyGatewayRecords(data, res.records);
+      const result = res.result;
+      if (result.status === "COMPLETED") {
+        const artifact = res.records.artifact;
         if (ticket) {
           next = {
             ...next,
@@ -259,8 +310,8 @@ function reducer(data: OSData, action: Action): OSData {
                     ...t,
                     status: "REVIEW" as TicketStatus,
                     approvalState: "PENDING" as TicketApprovalState,
-                    executionOutput: `${result.response.summary}\n\nOutput artifact: ${artifact?.title ?? applied.artifactId} (v${artifact?.version ?? 1}).`,
-                    safetyCheck: "Stub provider — no external systems touched.",
+                    executionOutput: `${res.records.runs.find((r) => r.status === "SUCCEEDED")?.outputSummary ?? "Output produced."}\n\nOutput artifact: ${artifact?.title ?? "—"} (v${artifact?.version ?? 1}) · validated against ${result.outputSchema}.`,
+                    safetyCheck: result.finishReason === "stub" ? "Stub provider — no external systems touched." : "Provider call only — no client systems touched.",
                     updatedAt: now,
                   }
                 : t,
@@ -269,22 +320,21 @@ function reducer(data: OSData, action: Action): OSData {
           };
           next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, "REVIEW") };
         }
-        const providerLabel = PROVIDER_LABELS[result.providerId];
-        const fellBack = result.providerId !== job.preferredProvider;
-        next = { ...next, activity: pushActivity(next, job.projectId, "ARTIFACT", `${artifact?.title ?? "Artifact"} v${artifact?.version ?? 1} produced by ${providerLabel}${fellBack ? ` (fallback from ${PROVIDER_LABELS[job.preferredProvider]})` : ""} — waiting for review`, ticket?.code, "Orchestrator") };
-        return next;
+        const fellBack = result.provider && result.provider !== job.preferredProvider;
+        const trail = result.attempts.filter((a) => a.outcome !== "succeeded").map((a) => `${PROVIDER_LABELS[a.providerId]} — ${a.outcome.replace("_", " ")}`);
+        return { ...next, activity: pushActivity(next, job.projectId, "ARTIFACT", `${artifact?.title ?? "Artifact"} v${artifact?.version ?? 1} produced by ${result.provider ? PROVIDER_LABELS[result.provider] : "provider"}${result.model ? ` (${result.model})` : ""}${fellBack ? ` after fallback: ${trail.join(" · ")}` : ""} — waiting for review`, ticket?.code, "Execution gateway") };
       }
-      const failed = applyJobFailure(next, job.id, new Error(action.error ?? "Provider execution failed"));
-      next = failed.data;
+      // FAILED / FAILED_VALIDATION
       if (ticket) {
         next = {
           ...next,
-          tickets: next.tickets.map((t) => (t.id === ticket.id ? { ...t, status: "BLOCKED" as TicketStatus, warnings: [...t.warnings, `Job failed: ${action.error ?? "unknown error"}`], updatedAt: now } : t)),
+          tickets: next.tickets.map((t) => (t.id === ticket.id ? { ...t, status: "BLOCKED" as TicketStatus, warnings: [...t.warnings, `Job ${result.status.toLowerCase().replace("_", " ")}: ${result.error?.message ?? "unknown error"}`], updatedAt: now } : t)),
           projects: touchProject(next.projects, ticket.projectId, { nextAction: `Resolve failed job on ${ticket.code}` }),
         };
         next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, "BLOCKED") };
       }
-      return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Job failed — ${action.error ?? "no provider available"}`, ticket?.code, "Orchestrator") };
+      const trail = result.attempts.map((a) => `${PROVIDER_LABELS[a.providerId]} — ${a.outcome.replace("_", " ")}`).join(" · ");
+      return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Job ${result.status === "FAILED_VALIDATION" ? "failed validation" : "failed"}${trail ? `: ${trail}` : ""}`, ticket?.code, "Execution gateway") };
     }
 
     case "RUN_QA": {
@@ -334,7 +384,7 @@ function reducer(data: OSData, action: Action): OSData {
       };
       let next: OSData = { ...data, tickets: [...data.tickets, ticket], qaRuns: [...data.qaRuns, qaRun], projects: touchProject(data.projects, project.id) };
       next = { ...next, agents: next.agents.map((a) => (a.id === AGENT_IDS.A06 ? { ...a, lastRunAt: now, outputsProduced: a.outputsProduced + 1, currentProjectId: project.id, currentTicketId: null, status: "IDLE" } : a)) };
-      next = { ...next, activity: pushActivity(next, project.id, "QA_RUN", `${code} QA run (mock) — ${open} open defect${open === 1 ? "" : "s"}`, code, "06 QA Auditor") };
+      next = { ...next, activity: pushActivity(next, project.id, "QA_RUN", `${code} QA run (mock) — ${open} open defect${open === 1 ? "" : "s"}`, code, ref(action.actor)) };
       return next;
     }
 
@@ -343,7 +393,7 @@ function reducer(data: OSData, action: Action): OSData {
       if (!approval) return data;
       const now = nowIso();
       const approvals = data.approvals.map((a) =>
-        a.id === approval.id ? { ...a, status: action.status, notes: action.notes ?? a.notes, decidedBy: action.status === "PENDING" ? undefined : ACTOR, decidedAt: action.status === "PENDING" ? null : now } : a,
+        a.id === approval.id ? { ...a, status: action.status, notes: action.notes ?? a.notes, decidedBy: action.status === "PENDING" ? undefined : action.actor.displayName, decidedById: action.status === "PENDING" ? null : action.actor.id, decidedAt: action.status === "PENDING" ? null : now } : a,
       );
       let next: OSData = { ...data, approvals, projects: touchProject(data.projects, approval.projectId) };
       if (approval.gate === "LAUNCH") {
@@ -351,7 +401,7 @@ function reducer(data: OSData, action: Action): OSData {
         next = { ...next, agents: next.agents.map((a) => (a.id === AGENT_IDS.ORCH ? { ...a, status: orchStatus, statusDetail: action.status === "APPROVED" ? "Launch approved" : action.status === "CHANGES_REQUESTED" ? "Launch changes requested" : "Human Review" } : a)) };
       }
       const label = action.status === "APPROVED" ? "approved" : action.status === "CHANGES_REQUESTED" ? "changes requested" : "reset to pending";
-      return { ...next, activity: pushActivity(next, approval.projectId, "APPROVAL", `${approval.gate.replace("_", " ")} gate ${label}`, approval.gate) };
+      return { ...next, activity: pushActivity(next, approval.projectId, "APPROVAL", `${approval.gate.replace("_", " ")} gate ${label}`, approval.gate, ref(action.actor)) };
     }
 
     case "TOGGLE_HOLD": {
@@ -368,7 +418,7 @@ function reducer(data: OSData, action: Action): OSData {
         return { ...p, holdNote: stillHeld ? (p.holdNote ?? hold.title) : undefined, updatedAt: now };
       });
       const next: OSData = { ...data, launchHolds, pages, projects: touchProject(data.projects, hold.projectId) };
-      return { ...next, activity: pushActivity(next, hold.projectId, "HOLD", `Launch hold ${resolved ? "resolved" : "reopened"} — ${hold.title}`) };
+      return { ...next, activity: pushActivity(next, hold.projectId, "HOLD", `Launch hold ${resolved ? "resolved" : "reopened"} — ${hold.title}`, undefined, ref(action.actor)) };
     }
 
     case "SET_QA_ITEM_STATUS": {
@@ -377,7 +427,7 @@ function reducer(data: OSData, action: Action): OSData {
       const now = nowIso();
       const qaItems = data.qaItems.map((q) => (q.id === item.id ? { ...q, status: action.status, resolvedAt: action.status === "FIXED" || action.status === "VERIFIED" ? now : null } : q));
       const next: OSData = { ...data, qaItems, projects: touchProject(data.projects, item.projectId) };
-      return { ...next, activity: pushActivity(next, item.projectId, "QA_FIX", `QA item ${action.status.toLowerCase()} — ${item.title}`) };
+      return { ...next, activity: pushActivity(next, item.projectId, "QA_FIX", `QA item ${action.status.toLowerCase()} — ${item.title}`, undefined, ref(action.actor)) };
     }
 
     case "CANCEL_JOB": {
@@ -389,14 +439,15 @@ function reducer(data: OSData, action: Action): OSData {
         next = { ...next, tickets: next.tickets.map((t) => (t.id === ticket.id ? { ...t, status: "QUEUED" as TicketStatus, approvalState: "NOT_REQUIRED" as TicketApprovalState, updatedAt: nowIso() } : t)) };
         next = { ...next, agents: syncAgent(next, ticket.agentId, ticket.id, "QUEUED") };
       }
-      return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Job cancelled${action.reason ? ` — ${action.reason}` : ""}`, ticket?.code) };
+      return { ...next, activity: pushActivity(next, job.projectId, "JOB", `Job cancelled${action.reason ? ` — ${action.reason}` : ""}`, ticket?.code, ref(action.actor)) };
     }
 
     case "REVIEW_KNOWLEDGE": {
       try {
-        const r = reviewKnowledgeItem(data, { kind: "human", name: ACTOR }, action.itemId, action.decision, { scope: action.scope, projectId: action.projectId });
+        if (action.actor.role === "VIEWER") return data;
+        const r = reviewKnowledgeItem(data, { kind: "human", name: action.actor.displayName, id: action.actor.id }, action.itemId, action.decision, { scope: action.scope, projectId: action.projectId });
         const label = action.decision === "APPROVED" ? "approved" : action.decision === "REJECTED" ? "rejected" : "deprecated";
-        return { ...r.data, activity: pushActivity(r.data, r.item.projectId, "KNOWLEDGE", `Knowledge ${label} — ${r.item.title} [${r.item.scope}]`) };
+        return { ...r.data, activity: pushActivity(r.data, r.item.projectId, "KNOWLEDGE", `Knowledge ${label} — ${r.item.title} [${r.item.scope}]`, undefined, ref(action.actor)) };
       } catch {
         return data;
       }
@@ -406,7 +457,7 @@ function reducer(data: OSData, action: Action): OSData {
       try {
         const r = proposeLesson(data, action.input);
         const agent = data.agents.find((a) => a.id === action.input.agentId);
-        return { ...r.data, activity: pushActivity(r.data, action.input.projectId, "KNOWLEDGE", `Lesson candidate proposed — ${r.item.title}`, undefined, agent ? `${agent.shortCode} ${agent.name}` : ACTOR) };
+        return { ...r.data, activity: pushActivity(r.data, action.input.projectId, "KNOWLEDGE", `Lesson candidate proposed — ${r.item.title}`, undefined, agent ? `${agent.shortCode} ${agent.name}` : ref(action.actor)) };
       } catch {
         return data;
       }
@@ -419,11 +470,37 @@ function reducer(data: OSData, action: Action): OSData {
       policy.fallbacks = policy.fallbacks.filter((p) => p !== policy.preferred);
       const agents = data.agents.map((a) => (a.id === agent.id ? { ...a, providerPolicy: policy, updatedAt: nowIso() } : a));
       const next = { ...data, agents };
-      return { ...next, activity: pushActivity(next, null, "AGENT", `${agent.shortCode} ${agent.name} — provider policy: ${PROVIDER_LABELS[policy.preferred]}${policy.fallbacks.length ? ` → ${policy.fallbacks.map((p) => PROVIDER_LABELS[p]).join(" → ")}` : ""}`) };
+      return { ...next, activity: pushActivity(next, null, "AGENT", `${agent.shortCode} ${agent.name} — provider policy: ${PROVIDER_LABELS[policy.preferred]}${policy.fallbacks.length ? ` → ${policy.fallbacks.map((p) => PROVIDER_LABELS[p]).join(" → ")}` : ""}`, undefined, ref(action.actor)) };
+    }
+
+    case "DECIDE_JOB_APPROVAL": {
+      try {
+        const r = decideJobApproval(data, action.approvalId, action.decision, action.actor, action.note);
+        const job = data.agentJobs.find((j) => j.id === r.approval.jobId);
+        const ticket = job?.ticketId ? data.tickets.find((t) => t.id === job.ticketId) : null;
+        let next = r.data;
+        if (ticket) next = { ...next, projects: touchProject(next.projects, ticket.projectId, { nextAction: action.decision === "APPROVED" ? `Run ${ticket.code} (approved)` : `Revise ${ticket.code} — approval rejected` }) };
+        return { ...next, activity: pushActivity(next, r.approval.projectId, "APPROVAL", `AMBER ${action.decision === "APPROVED" ? "approved" : "rejected"} — ${r.approval.requestedAction}`, ticket?.code, ref(action.actor)) };
+      } catch {
+        return data;
+      }
+    }
+
+    case "AUTHORIZE_JOB": {
+      const job = data.agentJobs.find((j) => j.id === action.jobId);
+      if (!job) return data;
+      const agent = data.agents.find((a) => a.id === job.agentId);
+      try {
+        const r = authorizeRedJob(data, job, action.actor, agent ? `${agent.shortCode} ${agent.name}` : job.agentId);
+        const ticket = job.ticketId ? data.tickets.find((t) => t.id === job.ticketId) : null;
+        return { ...r.data, activity: pushActivity(r.data, job.projectId, "APPROVAL", `RED action explicitly authorized — ${r.approval.requestedAction}`, ticket?.code, ref(action.actor)) };
+      } catch {
+        return data;
+      }
     }
 
     case "NOTE": {
-      return { ...data, activity: pushActivity(data, action.projectId, "NOTE", action.message) };
+      return { ...data, activity: pushActivity(data, action.projectId, "NOTE", action.message, undefined, ref(action.actor)) };
     }
   }
 }
@@ -455,28 +532,32 @@ function syncAgent(data: OSData, agentId: string, ticketId: string, ticketStatus
 
 export interface StoreStatus {
   repositoryKind: OSRepository["kind"];
-  /** Human description of the store, e.g. "In-memory (session only)". */
   description: string;
-  /** Why this repository was chosen (from createRepository), if known. */
   reason: string | null;
-  /** Last persistence error, if any. */
   persistError: string | null;
+  /** "http" when executions go to the server-side gateway, "embedded" in local mode. */
+  gatewayKind: GatewayClient["kind"];
 }
+
+export type RunOutcome = { kind: "executed"; response: GatewayResponse } | { kind: "needs_approval"; level: "AMBER" | "RED"; reason: string } | { kind: "skipped"; reason: string };
 
 interface OSStoreValue {
   data: OSData;
+  user: AuthUser;
   repositoryKind: OSRepository["kind"];
   status: StoreStatus;
-  router: ModelRouter;
+  gateway: GatewayClient;
   actions: {
     createProject: (input: NewProjectInput) => { projectId: string; clientId: string };
     transitionProject: (projectId: string, to: ProjectState) => void;
     setTicketStatus: (ticketId: string, status: TicketStatus) => void;
     setTicketApproval: (ticketId: string, approval: TicketApprovalState) => void;
-    /** Creates/starts the ticket's job, routes it through the ModelRouter, records runs + artifact. */
-    runTicket: (ticketId: string) => Promise<void>;
+    /** Creates/starts the ticket's job and executes it through the gateway (permission enforced there). */
+    runTicket: (ticketId: string) => Promise<RunOutcome>;
     runQA: (projectId: string) => void;
     decideApproval: (approvalId: string, status: ApprovalStatus, notes?: string) => void;
+    decideJobApproval: (approvalId: string, decision: "APPROVED" | "REJECTED", note?: string) => void;
+    authorizeJob: (jobId: string) => void;
     toggleHold: (holdId: string) => void;
     setQAItemStatus: (qaItemId: string, status: QAItem["status"]) => void;
     cancelJob: (jobId: string, reason?: string) => void;
@@ -488,10 +569,6 @@ interface OSStoreValue {
 }
 
 const OSStoreContext = React.createContext<OSStoreValue | null>(null);
-
-export function createDefaultRouter() {
-  return new ModelRouter({ registry: createDefaultRegistry() });
-}
 
 interface Boot {
   repository: OSRepository;
@@ -507,17 +584,20 @@ function bootSync(repository: OSRepository | Promise<RepositoryChoice> | undefin
 }
 
 /**
- * Boots the repository (sync for in-memory, async for Supabase), then mounts the store.
- * If a persistent repository fails to load, CT-OS falls back to the in-memory seed and says so.
+ * Boots the repository (sync for in-memory, async for Supabase), then mounts the store for the
+ * signed-in user. If a persistent repository fails to load, CT-OS falls back to the in-memory seed and says so.
  */
 export function OSStoreProvider({
   children,
   repository,
-  router,
+  user,
+  gateway,
 }: {
   children: React.ReactNode;
   repository?: OSRepository | Promise<RepositoryChoice>;
-  router?: ModelRouter;
+  user: AuthUser;
+  /** Omit to use the embedded (local, stub-only) gateway. */
+  gateway?: GatewayClient;
 }) {
   const [boot, setBoot] = React.useState<Boot | null>(() => {
     if (repository) return bootSync(repository);
@@ -550,8 +630,6 @@ export function OSStoreProvider({
     };
   }, [boot, repository]);
 
-  const routerInstance = React.useMemo(() => router ?? createDefaultRouter(), [router]);
-
   if (!boot) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas text-[13px] text-muted" role="status">
@@ -560,17 +638,21 @@ export function OSStoreProvider({
     );
   }
   return (
-    <OSStoreInner repository={boot.repository} initial={boot.data} reason={boot.reason} router={routerInstance}>
+    <OSStoreInner repository={boot.repository} initial={boot.data} reason={boot.reason} user={user} gateway={gateway}>
       {children}
     </OSStoreInner>
   );
 }
 
-function OSStoreInner({ children, repository, initial, reason, router }: { children: React.ReactNode; repository: OSRepository; initial: OSData; reason: string | null; router: ModelRouter }) {
+function OSStoreInner({ children, repository, initial, reason, user, gateway }: { children: React.ReactNode; repository: OSRepository; initial: OSData; reason: string | null; user: AuthUser; gateway?: GatewayClient }) {
   const [data, dispatch] = React.useReducer(reducer, initial);
   const [persistError, setPersistError] = React.useState<string | null>(null);
   const dataRef = React.useRef(data);
   dataRef.current = data;
+  const userRef = React.useRef(user);
+  userRef.current = user;
+
+  const gatewayClient = React.useMemo<GatewayClient>(() => gateway ?? new EmbeddedGatewayClient({ getData: () => dataRef.current, getUser: () => userRef.current }), [gateway]);
 
   React.useEffect(() => {
     let active = true;
@@ -583,54 +665,66 @@ function OSStoreInner({ children, repository, initial, reason, router }: { child
     };
   }, [data, repository]);
 
-  const actions = React.useMemo<OSStoreValue["actions"]>(
-    () => ({
+  const actions = React.useMemo<OSStoreValue["actions"]>(() => {
+    const actor = () => userRef.current;
+    return {
       createProject: (input) => {
         const ids = { clientId: newId("client"), projectId: newId("proj"), ticketId: newId("t") };
-        dispatch({ type: "CREATE_PROJECT", input, ids });
+        dispatch({ type: "CREATE_PROJECT", input, ids, actor: actor() });
         return { projectId: ids.projectId, clientId: ids.clientId };
       },
-      transitionProject: (projectId, to) => dispatch({ type: "TRANSITION_PROJECT", projectId, to }),
-      setTicketStatus: (ticketId, status) => dispatch({ type: "SET_TICKET_STATUS", ticketId, status }),
-      setTicketApproval: (ticketId, approval) => dispatch({ type: "SET_TICKET_APPROVAL", ticketId, approval }),
+      transitionProject: (projectId, to) => dispatch({ type: "TRANSITION_PROJECT", projectId, to, actor: actor() }),
+      setTicketStatus: (ticketId, status) => dispatch({ type: "SET_TICKET_STATUS", ticketId, status, actor: actor() }),
+      setTicketApproval: (ticketId, approval) => dispatch({ type: "SET_TICKET_APPROVAL", ticketId, approval, actor: actor() }),
       runTicket: async (ticketId) => {
         const snapshot = dataRef.current;
+        const user = actor();
         const ticket = snapshot.tickets.find((t) => t.id === ticketId);
-        if (!ticket) return;
-        if (snapshot.agentJobs.some((j) => j.ticketId === ticket.id && (j.status === "RUNNING" || j.status === "WAITING_APPROVAL"))) return;
-        const existing = snapshot.agentJobs.find((j) => j.ticketId === ticket.id && j.status === "QUEUED");
-        const jobId = existing?.id ?? newId("job");
-        // Build the provider request from the same snapshot the reducer will start from.
-        const planned = existing ? snapshot : createJobForTicket(snapshot, ticket, { id: jobId }).data;
-        const job = planned.agentJobs.find((j) => j.id === jobId)!;
-        const request = buildProviderRequest(planned, job);
-        dispatch({ type: "RUN_TICKET_START", ticketId, jobId });
-        try {
-          const result = await router.execute(job, request);
-          dispatch({ type: "RUN_TICKET_RESULT", jobId, result, error: null });
-        } catch (err) {
-          dispatch({ type: "RUN_TICKET_RESULT", jobId, result: null, error: err instanceof Error ? err.message : String(err) });
+        if (!ticket) return { kind: "skipped", reason: "Ticket not found" };
+        const state = ticketRunState(snapshot, ticketId, user);
+        if (state.inFlight) return { kind: "skipped", reason: "A job is already in flight for this ticket" };
+        const jobId = state.job?.id ?? newId("job");
+        const handoffId = newId("handoff");
+        // Plan on the same snapshot the reducer will start from, so we know whether execution may proceed.
+        const started = reducer(snapshot, { type: "RUN_TICKET_START", ticketId, jobId, handoffId, actor: user });
+        dispatch({ type: "RUN_TICKET_START", ticketId, jobId, handoffId, actor: user });
+        const job = started.agentJobs.find((j) => j.id === jobId);
+        if (!job || job.status !== "RUNNING") {
+          const agent = snapshot.agents.find((a) => a.id === ticket.agentId);
+          const level = job && agent ? effectiveLevel(job.permissionLevel, agent.permissionLevel) : "GREEN";
+          const check = job ? checkPermission({ level, user, job, approvals: started.jobApprovals }) : null;
+          return level === "GREEN" ? { kind: "skipped", reason: check?.reason ?? "Cannot run" } : { kind: "needs_approval", level, reason: check?.reason ?? "Approval required" };
         }
+        // Server-side truth must contain the RUNNING job before the gateway reads it.
+        try {
+          await repository.persist(started);
+        } catch {
+          /* persistence errors surface in Settings; the gateway will report not_found if the job is missing */
+        }
+        const response = await gatewayClient.execute(jobId, { artifactTitle: `${ticket.title} — ${job.requiredOutputSchema.split("@")[0].replace(/_/g, " ")}` });
+        dispatch({ type: "APPLY_EXECUTION", jobId, response, actor: user });
+        return { kind: "executed", response };
       },
-      runQA: (projectId) => dispatch({ type: "RUN_QA", projectId, ticketId: newId("t"), qaRunId: newId("qarun") }),
-      decideApproval: (approvalId, status, notes) => dispatch({ type: "DECIDE_APPROVAL", approvalId, status, notes }),
-      toggleHold: (holdId) => dispatch({ type: "TOGGLE_HOLD", holdId }),
-      setQAItemStatus: (qaItemId, status) => dispatch({ type: "SET_QA_ITEM_STATUS", qaItemId, status }),
-      cancelJob: (jobId, reason) => dispatch({ type: "CANCEL_JOB", jobId, reason }),
-      reviewKnowledge: (itemId, decision, opts) => dispatch({ type: "REVIEW_KNOWLEDGE", itemId, decision, scope: opts?.scope, projectId: opts?.projectId }),
-      proposeLesson: (input) => dispatch({ type: "PROPOSE_LESSON", input }),
-      setAgentProvider: (agentId, policy) => dispatch({ type: "SET_AGENT_PROVIDER", agentId, policy }),
-      note: (projectId, message) => dispatch({ type: "NOTE", projectId, message }),
-    }),
-    [router],
-  );
+      runQA: (projectId) => dispatch({ type: "RUN_QA", projectId, ticketId: newId("t"), qaRunId: newId("qarun"), actor: actor() }),
+      decideApproval: (approvalId, status, notes) => dispatch({ type: "DECIDE_APPROVAL", approvalId, status, notes, actor: actor() }),
+      decideJobApproval: (approvalId, decision, note) => dispatch({ type: "DECIDE_JOB_APPROVAL", approvalId, decision, note, actor: actor() }),
+      authorizeJob: (jobId) => dispatch({ type: "AUTHORIZE_JOB", jobId, actor: actor() }),
+      toggleHold: (holdId) => dispatch({ type: "TOGGLE_HOLD", holdId, actor: actor() }),
+      setQAItemStatus: (qaItemId, status) => dispatch({ type: "SET_QA_ITEM_STATUS", qaItemId, status, actor: actor() }),
+      cancelJob: (jobId, reason) => dispatch({ type: "CANCEL_JOB", jobId, reason, actor: actor() }),
+      reviewKnowledge: (itemId, decision, opts) => dispatch({ type: "REVIEW_KNOWLEDGE", itemId, decision, scope: opts?.scope, projectId: opts?.projectId, actor: actor() }),
+      proposeLesson: (input) => dispatch({ type: "PROPOSE_LESSON", input, actor: actor() }),
+      setAgentProvider: (agentId, policy) => dispatch({ type: "SET_AGENT_PROVIDER", agentId, policy, actor: actor() }),
+      note: (projectId, message) => dispatch({ type: "NOTE", projectId, message, actor: actor() }),
+    };
+  }, [gatewayClient, repository]);
 
   const status = React.useMemo<StoreStatus>(
-    () => ({ repositoryKind: repository.kind, description: repository.describe?.() ?? repository.kind, reason, persistError }),
-    [repository, reason, persistError],
+    () => ({ repositoryKind: repository.kind, description: repository.describe?.() ?? repository.kind, reason, persistError, gatewayKind: gatewayClient.kind }),
+    [repository, reason, persistError, gatewayClient],
   );
 
-  const value = React.useMemo(() => ({ data, actions, repositoryKind: repository.kind, status, router }), [data, actions, repository.kind, status, router]);
+  const value = React.useMemo(() => ({ data, user, actions, repositoryKind: repository.kind, status, gateway: gatewayClient }), [data, user, actions, repository.kind, status, gatewayClient]);
   return <OSStoreContext.Provider value={value}>{children}</OSStoreContext.Provider>;
 }
 

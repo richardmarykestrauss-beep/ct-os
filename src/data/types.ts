@@ -11,6 +11,33 @@
 export type ISODate = string;
 
 // ---------------------------------------------------------------------------
+// Identity (Supabase Auth + profiles). Not part of OSData — comes from the auth session.
+// ---------------------------------------------------------------------------
+
+export type UserRole = "ADMIN" | "PRODUCTION_LEAD" | "TEAM_MEMBER" | "VIEWER";
+
+export interface AuthUser {
+  /** Supabase auth user id (uuid) or a `local_` id in local mode. */
+  id: string;
+  email: string | null;
+  displayName: string;
+  role: UserRole;
+  /**
+   * Whether this account is usable. Absent/undefined means active (local mode, and any caller that
+   * predates this field, always are). Supabase accounts start inactive unless an invite matched at
+   * sign-up, or an ADMIN has since activated them — see docs/AUTH-AND-PERMISSIONS.md. An inactive
+   * user must be blocked from the app (UI) and from the gateway (server) alike; never trust one alone.
+   */
+  active?: boolean;
+}
+
+/** Who did something. Stored alongside the human-readable name so history stays legible. */
+export interface ActorRef {
+  id: string;
+  name: string;
+}
+
+// ---------------------------------------------------------------------------
 // Project state machine
 // ---------------------------------------------------------------------------
 
@@ -337,6 +364,8 @@ export interface Approval {
   status: ApprovalStatus;
   notes?: string;
   decidedBy?: string;
+  /** Auth user id of the decider (CTOS-002). Null for historical/seeded rows. */
+  decidedById: string | null;
   decidedAt: ISODate | null;
   createdAt: ISODate | null;
 }
@@ -367,6 +396,8 @@ export interface ActivityEvent {
   ref?: string;
   message: string;
   actor: string;
+  /** Auth user id when a human acted; null for agents/system/historical rows. */
+  actorId: string | null;
   /** null when historical timing is unknown — display by order, not date */
   at: ISODate | null;
   order: number;
@@ -409,6 +440,8 @@ export interface AgentJob {
   /** Set once a provider produced an accepted output artifact. */
   outputArtifactId: string | null;
   handoffId: string | null;
+  /** Who asked for the job to run (auth user id). */
+  requestedById: string | null;
   error?: string;
   createdAt: ISODate | null;
   updatedAt: ISODate | null;
@@ -416,7 +449,30 @@ export interface AgentJob {
   completedAt: ISODate | null;
 }
 
-export type AgentRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED";
+export type AgentRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "FAILED_VALIDATION" | "SKIPPED";
+
+export type ExecutionErrorCategory =
+  | "provider_unavailable"
+  | "provider_error"
+  | "validation"
+  | "permission_denied"
+  | "auth"
+  | "not_found"
+  | "config"
+  | "cancelled"
+  | "invalid_state"
+  | "internal";
+
+export interface ValidationIssue {
+  path: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  ok: boolean;
+  schema: string;
+  issues: ValidationIssue[];
+}
 
 /** One attempt to execute a job on one provider. A job may have several runs (fallbacks). */
 export interface AgentRun {
@@ -431,6 +487,10 @@ export interface AgentRun {
   status: AgentRunStatus;
   outputSummary?: string;
   error?: string;
+  errorCategory: ExecutionErrorCategory | null;
+  /** Structured-output validation result for this attempt (null when the provider never answered). */
+  validation: ValidationResult | null;
+  latencyMs: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
   startedAt: ISODate | null;
@@ -496,6 +556,7 @@ export interface KnowledgeItem {
   proposedByAgentId: string | null;
   /** Human who approved/rejected/deprecated it. Never an agent. */
   reviewedBy: string | null;
+  reviewedById: string | null;
   reviewedAt: ISODate | null;
   createdAt: ISODate | null;
   updatedAt: ISODate | null;
@@ -520,6 +581,7 @@ export interface AgentLesson {
   source: string;
   status: AgentLessonStatus;
   reviewedBy: string | null;
+  reviewedById: string | null;
   reviewedAt: ISODate | null;
   createdAt: ISODate | null;
 }
@@ -557,6 +619,71 @@ export interface ProjectIntegration {
 }
 
 // ---------------------------------------------------------------------------
+// Job approvals (AMBER) and authorizations (RED) — checked server-side by the gateway
+// ---------------------------------------------------------------------------
+
+export type JobApprovalKind = "APPROVAL" | "AUTHORIZATION";
+
+export type JobApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONSUMED" | "EXPIRED";
+
+export interface JobApproval {
+  id: string;
+  jobId: string;
+  projectId: string;
+  agentId: string;
+  /** APPROVAL = AMBER (a lead approves someone's request). AUTHORIZATION = RED (the executor authorises themselves, tied to the action). */
+  kind: JobApprovalKind;
+  permissionLevel: PermissionLevel;
+  /** Hash of (agent, task type, instructions, output schema) — the authorization is void if the action changes. */
+  actionFingerprint: string;
+  /** Plain-language description of what is being approved. */
+  requestedAction: string;
+  requestedById: string;
+  requestedByName: string;
+  approvedById: string | null;
+  approvedByName: string | null;
+  /** Role of the approver at decision time; the gateway re-verifies against profiles when it can. */
+  approvedByRole: UserRole | null;
+  status: JobApprovalStatus;
+  note?: string;
+  createdAt: ISODate | null;
+  decidedAt: ISODate | null;
+  consumedAt: ISODate | null;
+  expiresAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Execution logs — written by the gateway. Never contain secrets or tokens.
+// ---------------------------------------------------------------------------
+
+export type ExecutionLogStatus = "COMPLETED" | "FAILED" | "FAILED_VALIDATION" | "REJECTED" | "SKIPPED";
+
+export interface ExecutionLog {
+  id: string;
+  jobId: string;
+  runId: string | null;
+  projectId: string;
+  agentId: string;
+  providerId: ProviderId | null;
+  model: string | null;
+  status: ExecutionLogStatus;
+  /** Which provider attempt this was (0 = first). */
+  fallbackIndex: number;
+  permissionCheck: { level: PermissionLevel; outcome: "allowed" | "denied"; reason: string; approvalId: string | null };
+  validation: ValidationResult | null;
+  artifactId: string | null;
+  errorCategory: ExecutionErrorCategory | null;
+  errorMessage: string | null;
+  usage: { inputTokens: number | null; outputTokens: number | null } | null;
+  latencyMs: number | null;
+  requestedById: string | null;
+  /** Provider output kept for diagnosis when validation failed. Never client-sensitive content beyond what the job already held. */
+  rawOutput: unknown;
+  startedAt: ISODate | null;
+  finishedAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
 // Aggregate store shape (what a repository returns)
 // ---------------------------------------------------------------------------
 
@@ -581,4 +708,6 @@ export interface OSData {
   agentLessons: AgentLesson[];
   integrations: Integration[];
   projectIntegrations: ProjectIntegration[];
+  jobApprovals: JobApproval[];
+  executionLogs: ExecutionLog[];
 }

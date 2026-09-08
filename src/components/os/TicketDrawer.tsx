@@ -107,7 +107,10 @@ export function TicketDrawer({ ticketId, onClose }: { ticketId: string | null; o
                             <span className="font-mono text-[11px] text-muted">#{r.attempt}</span> {PROVIDER_LABELS[r.providerId]}
                             {r.error ? <span className="text-muted"> — {r.error}</span> : null}
                           </span>
-                          <Badge tone={r.status === "SUCCEEDED" ? "ok" : r.status === "FAILED" ? "danger" : "neutral"}>{r.status.toLowerCase()}</Badge>
+                          <span className="flex items-center gap-1">
+                            {r.latencyMs !== null ? <span className="font-mono text-[10px] text-muted">{r.latencyMs} ms</span> : null}
+                            <Badge tone={r.status === "SUCCEEDED" ? "ok" : r.status === "FAILED" ? "danger" : r.status === "FAILED_VALIDATION" ? "warn" : "neutral"}>{r.status.toLowerCase().replace("_", " ")}</Badge>
+                          </span>
                         </li>
                       ))}
                     </ul>

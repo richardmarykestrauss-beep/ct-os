@@ -11,7 +11,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm run test && vite build"
+    "verify": "npm run typecheck && npm run test && npm run security:scan",
+    "security:scan": "node scripts/security-scan.mjs",
+    "gateway:check": "npx --yes deno check --config supabase/functions/agent-execute/deno.json supabase/functions/agent-execute/index.ts && npm run gateway:bundle && npx --yes deno check --no-config supabase/functions/agent-execute/dist/index.js",
+    "gateway:bundle": "node scripts/bundle-edge-function.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",

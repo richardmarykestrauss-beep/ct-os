@@ -120,6 +120,11 @@ export class SupabaseRepository implements OSRepository {
     const nextKnown = new Map<TableName, Map<string, string>>();
     for (const spec of TABLES) {
       const rows = (data[spec.key] as object[]) ?? [];
+      if (spec.serverOwned) {
+        // The gateway writes these with the service role; the client only mirrors what it was given.
+        nextKnown.set(spec.table, new Map(rows.map((e) => [String((e as { id: string }).id), stable(e)])));
+        continue;
+      }
       const prev = this.known.get(spec.table) ?? new Map<string, string>();
       const next = new Map<string, string>();
       const changed: Row[] = [];

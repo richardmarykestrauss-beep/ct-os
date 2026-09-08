@@ -6,14 +6,15 @@
  * artifacts and handoffs. Functions are pure (OSData in → OSData out) except `executeJob`,
  * which awaits the router and then applies a pure result step.
  */
-import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, ArtifactType, OSData, Ticket } from "@/data/types";
+import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, Artifact, ArtifactType, ExecutionLog, Handoff, JobApproval, KnowledgeItem, OSData, Ticket } from "@/data/types";
 import type { ModelRouter } from "@/ai/router";
-import type { ProviderRequest, RouterAttempt, RouterResult } from "@/ai/types";
+import type { ApprovedKnowledge, ExecutionRequest, ProviderRequest, RouterAttempt, RouterResult } from "@/ai/types";
 import { NoProviderAvailableError } from "@/ai/types";
+import { isSchemaName, jsonSchemaFor, parseSchemaName } from "@/schemas/artifacts";
 import { createArtifact, createArtifactVersion, latestArtifact, outputSchemaFor, setArtifactStatus } from "./artifacts";
 import { createHandoff, transitionHandoff } from "./handoffs";
 import { clearTaskKnowledge, knowledgeForJob } from "./knowledge";
-import { newId, nowIso } from "@/lib/utils";
+import { newId, nowIso } from "@/lib/core";
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -69,6 +70,7 @@ export interface CreateJobInput {
   inputArtifactIds?: string[];
   availableToolIds?: string[];
   outputArtifactType?: ArtifactType;
+  requestedById?: string | null;
   id?: string;
   at?: string;
 }
@@ -101,6 +103,7 @@ export function createJob(data: OSData, input: CreateJobInput): { data: OSData; 
     status: "QUEUED",
     outputArtifactId: null,
     handoffId: null,
+    requestedById: input.requestedById ?? null,
     createdAt: at,
     updatedAt: at,
     startedAt: null,
@@ -110,17 +113,18 @@ export function createJob(data: OSData, input: CreateJobInput): { data: OSData; 
 }
 
 /** Build a job from a ticket: consumes the latest artifacts the agent normally reads, records a handoff from their producer. */
-export function createJobForTicket(data: OSData, ticket: Ticket, opts: { id?: string; at?: string } = {}): { data: OSData; job: AgentJob } {
+export function createJobForTicket(data: OSData, ticket: Ticket, opts: { id?: string; handoffId?: string; at?: string; requestedById?: string | null } = {}): { data: OSData; job: AgentJob } {
   const agent = getAgent(data, ticket.agentId);
   const inputs = agent.consumesArtifactTypes.map((t) => latestArtifact(data, ticket.projectId, t)).filter((a): a is NonNullable<typeof a> => !!a);
   const instructions = [ticket.objective, ticket.scope.length ? `Scope: ${ticket.scope.join("; ")}` : null, ticket.doNotChange.length ? `Do not change: ${ticket.doNotChange.join("; ")}` : null]
     .filter(Boolean)
     .join("\n");
-  let result = createJob(data, { ...opts, projectId: ticket.projectId, agentId: agent.id, ticketId: ticket.id, instructions, inputArtifactIds: inputs.map((a) => a.id) });
+  let result = createJob(data, { id: opts.id, at: opts.at, requestedById: opts.requestedById, projectId: ticket.projectId, agentId: agent.id, ticketId: ticket.id, instructions, inputArtifactIds: inputs.map((a) => a.id) });
   // Handoff: from the producer of the primary input artifact (if any and if a different agent) to this agent.
   const primary = inputs.find((a) => a.createdByAgentId && a.createdByAgentId !== agent.id);
   if (primary?.createdByAgentId) {
     const h = createHandoff(result.data, {
+      id: opts.handoffId,
       projectId: ticket.projectId,
       sourceAgentId: primary.createdByAgentId,
       destinationAgentId: agent.id,
@@ -176,52 +180,100 @@ export function cancelJob(data: OSData, jobId: string, reason?: string) {
 // Runs
 // ---------------------------------------------------------------------------
 
-function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], result: RouterResult | null, existingCount: number): AgentRun[] {
+export function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], result: RouterResult | null, existingCount: number, idFor: (i: number) => string = () => newId("run")): AgentRun[] {
   return attempts.map((a, i) => ({
-    id: newId("run"),
+    id: idFor(i),
     jobId: job.id,
     projectId: job.projectId,
     agentId: job.agentId,
     providerId: a.providerId,
-    model: a.outcome === "succeeded" ? (result?.response.model ?? null) : null,
+    model: a.model,
     attempt: existingCount + i + 1,
-    status: a.outcome === "succeeded" ? "SUCCEEDED" : a.outcome === "failed" ? "FAILED" : "SKIPPED",
+    status: a.outcome === "succeeded" ? "SUCCEEDED" : a.outcome === "failed" ? "FAILED" : a.outcome === "failed_validation" ? "FAILED_VALIDATION" : "SKIPPED",
     outputSummary: a.outcome === "succeeded" ? result?.response.summary : undefined,
     error: a.error,
-    inputTokens: a.outcome === "succeeded" ? (result?.response.usage.inputTokens ?? null) : null,
-    outputTokens: a.outcome === "succeeded" ? (result?.response.usage.outputTokens ?? null) : null,
+    errorCategory: a.errorCategory,
+    validation: a.validation,
+    latencyMs: a.latencyMs,
+    inputTokens: a.usage?.inputTokens ?? null,
+    outputTokens: a.usage?.outputTokens ?? null,
     startedAt: a.startedAt,
     finishedAt: a.finishedAt,
   }));
 }
 
 // ---------------------------------------------------------------------------
-// Request assembly
+// Execution envelope (Part C) — provider-neutral, approved knowledge only, scopes kept apart
 // ---------------------------------------------------------------------------
 
-export function buildProviderRequest(data: OSData, job: AgentJob): ProviderRequest {
-  const agent = getAgent(data, job.agentId);
-  const knowledge = knowledgeForJob(data, job.projectId, job.id);
-  const inputArtifacts = job.inputArtifactIds.map((id) => data.artifacts.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a);
-  const systemContext = [
-    `You are ${agent.shortCode} ${agent.name} — ${agent.role}. Responsibilities: ${agent.responsibilities.join(", ")}.`,
-    `Permission level: ${job.permissionLevel}. You may not exceed it.`,
-    `Produce output matching ${job.requiredOutputSchema}.`,
-    knowledge.length ? `Knowledge in force:\n${knowledge.map((k) => `- [${k.scope}] ${k.title}: ${k.content}`).join("\n")}` : "No approved knowledge items apply.",
-  ].join("\n\n");
+const MAX_CONTENT_CHARS = 12_000;
+
+function trimContent(content: unknown): unknown {
+  if (content === undefined || content === null) return null;
+  const json = JSON.stringify(content);
+  return json.length <= MAX_CONTENT_CHARS ? content : { _truncated: true, preview: json.slice(0, MAX_CONTENT_CHARS) };
+}
+
+export function splitKnowledge(items: KnowledgeItem[]): ApprovedKnowledge {
+  const pick = (scope: KnowledgeItem["scope"]) => items.filter((k) => k.status === "APPROVED" && k.scope === scope).map((k) => ({ id: k.id, title: k.title, content: k.content, category: k.category }));
+  return { doctrine: pick("DOCTRINE"), agency: pick("AGENCY"), project: pick("PROJECT"), task: pick("TASK") };
+}
+
+export interface EnvelopeInputs {
+  job: AgentJob;
+  agent: Agent;
+  inputArtifacts: Artifact[];
+  /** Already filtered to APPROVED items relevant to the project/job. */
+  knowledge: KnowledgeItem[];
+}
+
+export function buildExecutionRequest({ job, agent, inputArtifacts, knowledge }: EnvelopeInputs): ExecutionRequest {
   return {
     jobId: job.id,
+    projectId: job.projectId,
     agentId: job.agentId,
+    agent: { code: agent.shortCode, name: agent.name, role: agent.role, responsibilities: agent.responsibilities },
     taskType: job.taskType,
-    systemContext,
     instructions: job.instructions,
-    inputArtifacts,
-    knowledge,
+    inputArtifacts: inputArtifacts.map((a) => ({ id: a.id, type: a.type, version: a.version, title: a.title, summary: a.summary ?? null, content: trimContent(a.content) })),
+    approvedKnowledge: splitKnowledge(knowledge),
+    availableTools: job.availableToolIds,
     requiredOutputSchema: job.requiredOutputSchema,
+    schemaVersion: parseSchemaName(job.requiredOutputSchema).version,
+    preferredProvider: job.preferredProvider,
+    fallbackProviders: job.fallbackProviders,
     requiredCapabilities: job.requiredCapabilities,
     permissionLevel: job.permissionLevel,
-    availableToolIds: job.availableToolIds,
+    requestedById: job.requestedById,
   };
+}
+
+/** Build the envelope from an OSData snapshot (store / embedded gateway / tests). */
+export function buildExecutionRequestFromData(data: OSData, job: AgentJob): ExecutionRequest {
+  const agent = getAgent(data, job.agentId);
+  const inputArtifacts = job.inputArtifactIds.map((id) => data.artifacts.find((a) => a.id === id)).filter((a): a is Artifact => !!a);
+  return buildExecutionRequest({ job, agent, inputArtifacts, knowledge: knowledgeForJob(data, job.projectId, job.id) });
+}
+
+/** Adds the assembled system context and output JSON schema. Sections are labelled so doctrine, agency patterns and project facts never blur. */
+export function toProviderRequest(req: ExecutionRequest): ProviderRequest {
+  const k = req.approvedKnowledge;
+  const section = (label: string, items: { title: string; content: string }[]) => (items.length ? `${label}:\n${items.map((i) => `- ${i.title}: ${i.content}`).join("\n")}` : `${label}: none`);
+  const systemContext = [
+    `You are ${req.agent.code} ${req.agent.name} — ${req.agent.role}, an agent of Creative Touch Website OS. Responsibilities: ${req.agent.responsibilities.join(", ")}.`,
+    `Permission level for this job: ${req.permissionLevel}. You may not exceed it. You never mutate live systems yourself; you produce a structured artifact for human review.`,
+    section("DOCTRINE (permanent Creative Touch rules)", k.doctrine),
+    section("AGENCY KNOWLEDGE (validated patterns)", k.agency),
+    section("PROJECT FACTS (this client/project only)", k.project),
+    section("TASK CONTEXT (this job only)", k.task),
+    `Output contract: return exactly one JSON object satisfying "${req.requiredOutputSchema}".`,
+  ].join("\n\n");
+  return { ...req, systemContext, outputJsonSchema: isSchemaName(req.requiredOutputSchema) ? jsonSchemaFor(req.requiredOutputSchema) : null };
+}
+
+/** @deprecated CTOS-001 name — kept for callers/tests; same as toProviderRequest(buildExecutionRequestFromData()). */
+export function buildProviderRequest(data: OSData, job: AgentJob): ProviderRequest {
+  return toProviderRequest(buildExecutionRequestFromData(data, job));
 }
 
 // ---------------------------------------------------------------------------
@@ -229,27 +281,29 @@ export function buildProviderRequest(data: OSData, job: AgentJob): ProviderReque
 // ---------------------------------------------------------------------------
 
 export interface ApplyResultOptions {
-  /** Title for the produced artifact. Defaults to the schema label + job id. */
   artifactTitle?: string;
   /** When true (default) the job pauses in WAITING_APPROVAL; a human completes it. */
   requiresApproval?: boolean;
+  runIdFor?: (i: number) => string;
+  artifactId?: string;
 }
 
-/** Record runs, create the output artifact (new version if one exists for the lineage), advance job + handoff. */
+/** Record runs, create the output artifact from the VALIDATED output (new version if one exists for the lineage), advance job + handoff. */
 export function applyJobResult(data: OSData, jobId: string, result: RouterResult, opts: ApplyResultOptions = {}): { data: OSData; job: AgentJob; runs: AgentRun[]; artifactId: string } {
   const job = data.agentJobs.find((j) => j.id === jobId);
   if (!job) throw new Error(`Job ${jobId} not found`);
   if (job.status !== "RUNNING") throw new JobStateError(`Job ${jobId} is ${job.status}, expected RUNNING`);
+  if (!result.validation.ok) throw new JobStateError("applyJobResult requires a validated result");
   const existingRuns = data.agentRuns.filter((r) => r.jobId === jobId).length;
-  const runs = runsFromAttempts(job, result.attempts, result, existingRuns);
+  const runs = runsFromAttempts(job, result.attempts, result, existingRuns, opts.runIdFor);
   let next: OSData = { ...data, agentRuns: [...data.agentRuns, ...runs] };
 
-  const type = job.requiredOutputSchema.split("@")[0] as ArtifactType;
+  const type = parseSchemaName(job.requiredOutputSchema).type;
   const previous = job.ticketId ? next.artifacts.find((a) => a.jobId && a.type === type && a.projectId === job.projectId && a.ticketId === job.ticketId && a.status !== "SUPERSEDED") : null;
   const title = opts.artifactTitle ?? `${type.replace(/_/g, " ")} — ${job.taskType}`;
   const created = previous
-    ? createArtifactVersion(next, { previousArtifactId: previous.id, createdByAgentId: job.agentId, createdByProvider: result.providerId, jobId: job.id, ticketId: job.ticketId, summary: result.response.summary, content: result.response.output })
-    : createArtifact(next, { projectId: job.projectId, type, title, createdByAgentId: job.agentId, createdByProvider: result.providerId, jobId: job.id, ticketId: job.ticketId, summary: result.response.summary, content: result.response.output });
+    ? createArtifactVersion(next, { previousArtifactId: previous.id, createdByAgentId: job.agentId, createdByProvider: result.providerId, jobId: job.id, ticketId: job.ticketId, summary: result.response.summary, content: result.output, id: opts.artifactId })
+    : createArtifact(next, { projectId: job.projectId, type, title, createdByAgentId: job.agentId, createdByProvider: result.providerId, jobId: job.id, ticketId: job.ticketId, summary: result.response.summary, content: result.output, id: opts.artifactId });
   next = created.data;
 
   const requiresApproval = opts.requiresApproval ?? true;
@@ -268,12 +322,12 @@ export function applyJobResult(data: OSData, jobId: string, result: RouterResult
   return { data: next, job: t.job, runs, artifactId: created.artifact.id };
 }
 
-export function applyJobFailure(data: OSData, jobId: string, error: NoProviderAvailableError | Error): { data: OSData; job: AgentJob; runs: AgentRun[] } {
+export function applyJobFailure(data: OSData, jobId: string, error: NoProviderAvailableError | Error, opts: { runIdFor?: (i: number) => string } = {}): { data: OSData; job: AgentJob; runs: AgentRun[] } {
   const job = data.agentJobs.find((j) => j.id === jobId);
   if (!job) throw new Error(`Job ${jobId} not found`);
   const attempts = error instanceof NoProviderAvailableError ? error.attempts : [];
   const existingRuns = data.agentRuns.filter((r) => r.jobId === jobId).length;
-  const runs = runsFromAttempts(job, attempts, null, existingRuns);
+  const runs = runsFromAttempts(job, attempts, null, existingRuns, opts.runIdFor);
   let next: OSData = { ...data, agentRuns: [...data.agentRuns, ...runs] };
   const t = transitionJob(next, jobId, "FAILED", { error: error.message });
   next = clearTaskKnowledge(t.data, jobId);
@@ -303,7 +357,35 @@ export function requestJobRevision(data: OSData, jobId: string, note?: string): 
 }
 
 // ---------------------------------------------------------------------------
-// Execution (async — the only impure step)
+// Gateway records — what an execution produced, applied identically on server and client
+// ---------------------------------------------------------------------------
+
+export interface GatewayRecords {
+  job: AgentJob;
+  runs: AgentRun[];
+  artifact: Artifact | null;
+  supersededArtifactId: string | null;
+  handoff: Handoff | null;
+  approval: JobApproval | null;
+  logs: ExecutionLog[];
+}
+
+/** Merge gateway-produced records into a snapshot (upsert by id). Pure. */
+export function applyGatewayRecords(data: OSData, records: GatewayRecords): OSData {
+  const upsert = <T extends { id: string }>(list: T[], item: T | null): T[] => (item ? (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]) : list);
+  let next: OSData = { ...data };
+  next = { ...next, agentJobs: upsert(next.agentJobs, records.job) };
+  for (const r of records.runs) next = { ...next, agentRuns: upsert(next.agentRuns, r) };
+  if (records.supersededArtifactId) next = { ...next, artifacts: next.artifacts.map((a) => (a.id === records.supersededArtifactId ? { ...a, status: "SUPERSEDED", updatedAt: records.artifact?.createdAt ?? a.updatedAt } : a)) };
+  next = { ...next, artifacts: upsert(next.artifacts, records.artifact) };
+  next = { ...next, handoffs: upsert(next.handoffs, records.handoff) };
+  next = { ...next, jobApprovals: upsert(next.jobApprovals, records.approval) };
+  for (const l of records.logs) next = { ...next, executionLogs: upsert(next.executionLogs, l) };
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// Direct execution (tests / embedded convenience) — the gateway is the production path
 // ---------------------------------------------------------------------------
 
 export interface ExecuteJobOutcome {
@@ -314,12 +396,12 @@ export interface ExecuteJobOutcome {
   error: Error | null;
 }
 
-/** Start → route → apply. Never throws for provider failures; the failure is recorded on the job. */
+/** Start → route → validate → apply. Never throws for provider failures; the failure is recorded on the job. */
 export async function executeJob(data: OSData, jobId: string, router: ModelRouter, opts: ApplyResultOptions = {}): Promise<ExecuteJobOutcome> {
   const started = startJob(data, jobId);
   const request = buildProviderRequest(started.data, started.job);
   try {
-    const result = await router.execute(started.job, request);
+    const result = await router.execute(request);
     const applied = applyJobResult(started.data, jobId, result, opts);
     return { data: applied.data, job: applied.job, runs: applied.runs, artifactId: applied.artifactId, error: null };
   } catch (err) {

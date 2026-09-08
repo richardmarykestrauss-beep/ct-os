@@ -34,27 +34,27 @@ Seeded policies (editable on the Agents page):
 | 07 | Claude | OpenAI | — |
 | 08 | Claude | Gemini → OpenAI | — |
 
-The agent is the same agent whichever provider runs it. Reviewer providers are recorded but not
-executed in Phase 1.
+The agent is the same agent whichever provider runs it (see "Agent continuity" below). Reviewer
+providers are recorded but not executed yet.
 
 ## Provider independence
 
 ```
-                 ┌──────────── src/ai ─────────────┐
- AgentJob ──▶ ModelRouter ──▶ AIProvider (interface) ──▶ ClaudeProvider  ─┐
-                 │                                    OpenAIProvider  ─┼─ stubs (Phase 1)
-                 │                                    GeminiProvider  ─┘
-                 └── RouterResult { providerId, response, attempts[] }
+                        ┌──────────── src/ai (inside the gateway) ─────────────┐
+ ExecutionRequest ──▶ ModelRouter ──▶ AIProvider (interface) ──▶ OpenAIProvider  (live, server-side)
+                        │                                        ClaudeProvider  (seam)
+                        │                                        GeminiProvider  (seam)
+                        └── validate(<type>@<version>) ── RouterResult { providerId, output, attempts[] }
 ```
 
-* `AIProvider`: `id`, `displayName`, `capabilities`, `connected`, `configured?`, `availability()`, `execute(request)`.
-* `ProviderRequest` is provider-neutral: assembled system context (agent role + knowledge in force),
-  instructions, input artifacts, required output schema (e.g. `site_blueprint@1`), required
-  capabilities, permission level, available tool ids.
+* `AIProvider`: `id`, `displayName`, `capabilities`, `connected`, `connectionState`, `availability()`, `execute(request)`.
+* `ProviderRequest` = provider-neutral `ExecutionRequest` (agent identity, instructions, input
+  artifacts, APPROVED knowledge split by scope, tools, `<type>@<version>` output schema, policy,
+  permission level) + assembled `systemContext` + `outputJsonSchema`.
 * `ProviderResponse`: structured `output`, human `summary`, `model`, `usage`, `finishReason`.
-* Stub adapters never touch the network. They return a labelled placeholder output so the whole
-  job → run → artifact → handoff pipeline is exercisable. `configured` only reports whether an env
-  key exists; nothing reads or sends it.
+* Stub adapters never touch the network; they return the schema example so the whole job → run →
+  artifact → handoff pipeline is exercisable. The OpenAI adapter is live (server-side only); Claude and
+  Gemini are seams that report "Not configured". Details: `docs/PROVIDER-ADAPTERS.md`.
 
 ### Routing decision (`ModelRouter.plan / execute`)
 
@@ -62,8 +62,11 @@ executed in Phase 1.
 2. Exclude providers not registered, disabled in settings, missing a required capability, or
    reporting themselves unavailable — each exclusion is recorded with its reason.
 3. Optional `rank()` hook re-orders survivors (reserved for cost/priority routing).
-4. Try in order; first success wins. Every skipped/failed/succeeded attempt is recorded, in policy order.
-5. If nothing succeeds: `NoProviderAvailableError` carrying all attempts; the job becomes FAILED.
+4. Try in order; each answer is validated against the required schema — a refusal or a failed
+   validation is a failed attempt and the next provider is tried. Every skipped / failed /
+   failed-validation / succeeded attempt is recorded, in policy order.
+5. If nothing succeeds: `NoProviderAvailableError` carrying all attempts; the job becomes FAILED
+   (or FAILED_VALIDATION when only validation failed).
 
 ## AgentJob contract
 
@@ -71,8 +74,11 @@ executed in Phase 1.
 id · projectId · agentId · ticketId? · taskType · instructions
 inputArtifactIds[] · availableToolIds[] · requiredOutputSchema ("<artifact_type>@<schemaVersion>")
 requiredCapabilities[] · preferredProvider · fallbackProviders[] · permissionLevel
-status · outputArtifactId · handoffId · error? · createdAt · updatedAt · startedAt · completedAt
+status · outputArtifactId · handoffId · requestedById · error? · createdAt · updatedAt · startedAt · completedAt
 ```
+
+Execution is requested with the job id only; the gateway builds the provider-neutral
+`ExecutionRequest` from server-side truth (`docs/EXECUTION-GATEWAY.md`).
 
 Task types: `research · ux_architecture · creative_direction · seo_content · build · qa_audit ·
 deployment · curate_lessons · orchestrate` (derived from the agent code unless given).
@@ -91,20 +97,27 @@ QUEUED ──▶ RUNNING ──▶ WAITING_APPROVAL ──▶ COMPLETED
 ### Runs
 
 Each provider attempt is an `AgentRun`: `jobId, providerId, model, attempt, status
-(RUNNING|SUCCEEDED|FAILED|SKIPPED), outputSummary, error, tokens, startedAt, finishedAt`. A job that
-fell back has several runs. Runs are shown in the project **Runs** tab and in the ticket drawer.
+(RUNNING|SUCCEEDED|FAILED|FAILED_VALIDATION|SKIPPED), outputSummary, error, errorCategory, validation,
+latencyMs, tokens, startedAt, finishedAt`. A job that fell back has several runs. Runs are shown in the
+project **Runs** tab (agent, task, provider, status, duration, attempts, output artifact) and in the
+ticket drawer. The gateway also writes one `ExecutionLog` per attempt.
 
 ### What "Run Next Ticket" does now
 
-1. `createJobForTicket`: job for the ticket's agent; inputs = latest artifacts of the types the agent
-   consumes; a `Handoff` (ACCEPTED) from the producer of the primary input to this agent.
-2. `startJob` → RUNNING; handoff IN_PROGRESS; ticket BUILDING; agent WORKING.
-3. `ModelRouter.execute` (stub providers).
-4. `applyJobResult`: runs recorded; output artifact created (v1, or v(n+1) superseding the previous
+1. `createJobForTicket`: job for the ticket's agent (with `requestedById`); inputs = latest artifacts of
+   the types the agent consumes; a `Handoff` (ACCEPTED) from the producer of the primary input.
+2. Permission pre-check in the store: GREEN starts; AMBER without approval records a PENDING request
+   under Approvals; RED without the user's authorization stops with a note. (The gateway re-checks.)
+3. `startJob` → RUNNING; handoff IN_PROGRESS; ticket BUILDING; agent WORKING; snapshot persisted.
+4. `GatewayClient.execute(jobId)` → server: session, tier, envelope, `ModelRouter` with validation and
+   fallback, records committed.
+5. `APPLY_EXECUTION` mirrors the records: output artifact (v1, or v(n+1) superseding the previous
    output for the same ticket); job WAITING_APPROVAL; ticket REVIEW / approval PENDING.
-5. Human **Approve** in the ticket drawer → job COMPLETED, artifact FINAL, handoff COMPLETED, task
-   knowledge cleared. **Needs revision** → job QUEUED; the next run produces the next version.
-6. On provider failure: job FAILED with attempts recorded, ticket BLOCKED with a warning, handoff REJECTED.
+6. Human **Approve** in the ticket drawer → job COMPLETED, artifact FINAL, handoff COMPLETED, task
+   knowledge cleared. **Needs revision** → job QUEUED; the next run produces the next version (and,
+   for AMBER, needs a fresh approval).
+7. On failure: job FAILED / FAILED_VALIDATION with attempts recorded, ticket BLOCKED with a warning,
+   handoff REJECTED.
 
 ## Artifacts
 
@@ -133,6 +146,15 @@ only with an output artifact. Agents never converse; the artifact is the message
 
 ## Permission model on jobs
 
-Every job carries `permissionLevel` copied from its agent, and the provider request states it. GREEN
-jobs may run without approval; AMBER/RED actions still require the human gates. In Phase 1 the level is
-recorded and passed to providers; enforcement on real site actions arrives with the execution plane.
+Every job carries `permissionLevel` copied from its agent; the gateway enforces the higher of that and
+the agent's current tier. GREEN runs automatically; AMBER requires an approved `JobApproval` for the
+exact action fingerprint by a Production Lead/Admin; RED requires the executing user's own
+authorization. Full rules in `docs/AUTH-AND-PERMISSIONS.md`.
+
+## Agent continuity
+
+An agent is the durable unit: code, name, role, tier, knowledge, inputs, handoffs and artifact lineage
+all belong to it and live in CT-OS. The provider is chosen per execution by policy and availability and
+is recorded on the run and on the artifact (`createdByProvider`) as provenance only. Agent 02 executed
+by OpenAI because Claude was down is still Agent 02, working on the same blueprint lineage. This is
+asserted by `src/__tests__/gateway.test.ts › agent continuity`.

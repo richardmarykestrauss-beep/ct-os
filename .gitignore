@@ -5,3 +5,4 @@ dist
 .env
 .env.local
 .env.*.local
+supabase/functions/agent-execute/dist

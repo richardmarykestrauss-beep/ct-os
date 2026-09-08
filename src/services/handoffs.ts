@@ -5,7 +5,7 @@
  * sanctioned channel between agents — there is no agent-to-agent conversation.
  */
 import type { AgentCode, ArtifactType, Handoff, HandoffStatus, OSData } from "@/data/types";
-import { newId, nowIso } from "@/lib/utils";
+import { newId, nowIso } from "@/lib/core";
 
 /** The standard production chain. Each step names the artifact the next agent consumes. */
 export const HANDOFF_CHAIN: { from: AgentCode; artifact: ArtifactType; to: AgentCode }[] = [

@@ -5,7 +5,7 @@ It owns project state, client state, agent identities, workflow, approvals, perm
 knowledge, execution history, QA evidence and deployment state. Claude, OpenAI and Gemini are
 replaceable intelligence providers behind a neutral interface.
 
-Phase: **CTOS-001 — Persistent Core + Provider-Neutral Agent Foundation** (this document reflects that state).
+Phase: **CTOS-002 — Identity + Secure Execution Gateway + First Live Provider Adapter** (this document reflects that state; CTOS-001 laid the persistent core).
 
 ## Stack
 
@@ -18,7 +18,9 @@ from `src/services/supabase/client.ts`.
 | Plane | What it is | Where |
 |---|---|---|
 | Control plane | This app. Records state, decisions, evidence. Never mutates a client site. | `src/state`, `src/services`, `src/routes` |
-| Intelligence plane | Replaceable model providers behind `AIProvider` + `ModelRouter`. | `src/ai` |
+| Identity | Supabase Auth + `profiles` (roles ADMIN / PRODUCTION_LEAD / TEAM_MEMBER / VIEWER). | `src/auth`, migration 0002 |
+| Execution gateway | Server-side: verifies the session, enforces permission tiers, holds provider secrets, validates output, writes execution history. | `src/gateway`, `supabase/functions/agent-execute` |
+| Intelligence plane | Replaceable model providers behind `AIProvider` + `ModelRouter`; OpenAI live, Claude/Gemini seams. | `src/ai` |
 | Execution plane | WordPress, hosting, DNS, Google, Meta… (adapters arrive later). | `src/services/integrations.ts` (contracts only) |
 
 ## Source layout
@@ -30,16 +32,29 @@ src/
     state-machine.ts    Project state machine, phases, permission tiers, safety pipeline
     seed.ts             U-Proof seed: real history, no invented dates; agents 00–08; gates;
                         integrations; doctrine; 10 U-Proof lesson CANDIDATES
+  auth/
+    backend.ts          SupabaseAuthBackend (real) · LocalAuthBackend (no Supabase) · roles
+    AuthProvider.tsx    Session context; main.tsx shows SignInScreen when there is no session
+  schemas/
+    artifacts.ts        Versioned Zod output schemas (<type>@<version>), examples, validateOutput, JSON Schema export
   ai/
-    types.ts            AIProvider, ProviderRequest/Response, RouterResult, errors
-    registry.ts         ProviderRegistry + createDefaultRegistry() (all stubs)
-    router.ts           ModelRouter: preferred → fallbacks, capability + availability filter
-    providers/          StubProvider base; ClaudeProvider, OpenAIProvider, GeminiProvider seams
+    types.ts            ExecutionRequest / ExecutionResult contracts, AIProvider, RouterAttempt
+    registry.ts         createBrowserRegistry() (stubs only) · createServerRegistry(env) (live adapters)
+    router.ts           ModelRouter: policy order, capability/availability filter, validation-driven fallback
+    providers/          StubProvider · OpenAIProvider (live) · Claude/Gemini seams
+  gateway/
+    core.ts             handleExecute / handleHealth — auth → truth → permission → route → records
+    http.ts             Runtime-neutral HTTP surface (Deno + Node wrappers call it)
+    store.ts            GatewayStore interface · OSDataGatewayStore (local/tests)
+    supabase.ts         SupabaseGatewayStore / SupabaseGatewayAuth (service role) · FakeGatewayDb
+    client.ts           HttpGatewayClient (browser → server) · EmbeddedGatewayClient (local mode)
+    node.ts / vite-plugin.ts   Dev middleware serving POST /agent-execute with server-only env
   services/
     repository.ts       OSRepository seam, InMemoryRepository, createRepository() (env-driven)
     supabase/           SupabaseRepository (diff-upsert), row mapping, SDK client (lazy)
     artifacts.ts        Artifact types, creation, versioning, lineage
-    agent-jobs.ts       AgentJob contract, lifecycle, runs, request assembly, executeJob()
+    agent-jobs.ts       AgentJob contract, lifecycle, runs, envelope assembly, applyGatewayRecords()
+    job-approvals.ts    AMBER approvals / RED authorizations, action fingerprint, checkPermission()
     handoffs.ts         Handoff records + the standard production chain
     knowledge.ts        Four knowledge scopes, proposal/approval rules, context assembly
     integrations.ts     Adapter contracts + status labels
@@ -47,8 +62,11 @@ src/
     os-store.tsx        Context + reducer over OSData. Every mutation is an action.
   routes/               Overview · Projects · Project detail (…+ Runs tab) · Agents · Build Queue
                         · QA · Approvals · Clients · Knowledge · Settings
-supabase/migrations/    0001_ctos_core.sql — full schema, guard trigger, RLS
-docs/                   This file, AGENT-ARCHITECTURE, INTELLIGENCE-MODEL, SUPABASE-SCHEMA
+supabase/migrations/    0001_ctos_core.sql — core schema · 0002_identity_gateway.sql — profiles, approvals, logs, RLS
+supabase/functions/     agent-execute — the Edge Function wrapper around src/gateway (Deno)
+scripts/                security-scan.mjs (bundle secret scan) · bundle-edge-function.mjs
+docs/                   ARCHITECTURE, AGENT-ARCHITECTURE, INTELLIGENCE-MODEL, SUPABASE-SCHEMA,
+                        EXECUTION-GATEWAY, AUTH-AND-PERMISSIONS, PROVIDER-ADAPTERS
 ```
 
 ## Entities
@@ -59,24 +77,33 @@ Ticket · Artifact · QAItem · LaunchHold · Approval · ActivityEvent.
 Added in CTOS-001: **QARun** · **GateDefinition** · **AgentJob** · **AgentRun** · **Handoff** ·
 **KnowledgeItem** · **AgentLesson** · **Integration** · **ProjectIntegration**.
 
+Added in CTOS-002: **JobApproval** (AMBER approvals / RED authorizations) · **ExecutionLog**
+(gateway-written history) · identity fields (`actorId`, `decidedById`, `reviewedById`, `requestedById`)
+· run validation fields (`validation`, `latencyMs`, `errorCategory`, status `FAILED_VALIDATION`).
+`profiles` (auth → role) lives outside OSData.
+
 All IDs are strings (`text` in Postgres): seeded readable ids (`proj_uproof`) and generated
 `<prefix>_<uuid>` ids coexist. Unknown historical timestamps are `null` — never invented.
 
 ## Data flow
 
 ```
-UI  ──actions──▶  os-store reducer  ──(pure services)──▶  new OSData  ──persist──▶  OSRepository
-                        │                                                          ├─ InMemoryRepository
-                        └── runTicket() awaits ModelRouter.execute() then           └─ SupabaseRepository
-                            dispatches RUN_TICKET_RESULT                                (diff upsert)
+UI ──actions(+actor)──▶ os-store reducer ──(pure services)──▶ new OSData ──persist──▶ OSRepository
+                              │                                                       ├─ InMemory
+     runTicket():             │                                                       └─ Supabase
+       RUN_TICKET_START ──▶ persist ──▶ GatewayClient.execute(jobId) ──▶ POST /agent-execute
+                                                                             │ (server: auth, tier,
+                                                                             │  envelope, router,
+                                                                             │  validation, records)
+       APPLY_EXECUTION ◀──────────────── { result, records } ◀───────────────┘
 ```
 
-* Every mutation is a reducer action. Services (`artifacts`, `agent-jobs`, `handoffs`, `knowledge`)
-  are pure functions `OSData → OSData` so the reducer, the tests and future server-side writers share
-  one implementation.
-* The only async step is provider execution. `actions.runTicket` builds the provider request from the
-  current snapshot, dispatches `RUN_TICKET_START`, awaits the router, then dispatches
-  `RUN_TICKET_RESULT` (success or failure). The reducer never awaits.
+* Every mutation is a reducer action carrying the signed-in `actor`. Services (`artifacts`,
+  `agent-jobs`, `job-approvals`, `handoffs`, `knowledge`) are pure `OSData → OSData` functions shared
+  by the reducer, the gateway (`OSDataGatewayStore` / `applyGatewayRecords`) and the tests.
+* The browser never composes a prompt or calls a provider. `runTicket` starts the job (or records the
+  approval it still needs), persists so the server sees the RUNNING job, calls the gateway with the
+  job id, then mirrors the returned records. In local mode the same core runs embedded with stubs.
 
 ## Provider independence
 
@@ -87,8 +114,11 @@ UI  ──actions──▶  os-store reducer  ──(pure services)──▶  ne
 * A **job** copies the agent's policy at creation so execution history stays truthful even if the
   policy changes later.
 * The **router** decides: preferred → fallbacks, minus providers missing a required capability, minus
-  unavailable providers, minus providers disabled in settings. Every attempt is recorded as an
-  `AgentRun`. See `docs/AGENT-ARCHITECTURE.md`.
+  unavailable providers, minus providers disabled in settings; every answer is validated against the
+  job's `<type>@<version>` schema and a failed validation falls through to the next provider. Every
+  attempt is recorded as an `AgentRun` and an `ExecutionLog`. See `docs/PROVIDER-ADAPTERS.md`.
+* **Secrets** live only in the gateway (`docs/EXECUTION-GATEWAY.md`); `npm run security:scan` proves
+  none reach the bundle.
 
 ## Artifact handoffs
 
@@ -101,11 +131,12 @@ agent, input artifacts, output artifact, job/run and status. There is no agent-t
 DOCTRINE · AGENCY · PROJECT · TASK. Agents propose; only humans approve. See
 `docs/INTELLIGENCE-MODEL.md`.
 
-## Permission model
+## Identity and permission model
 
-Tiers GREEN / AMBER / RED (`state-machine.ts` `PERMISSION_MODEL`). Each agent carries a
-`permissionLevel`; each job copies it and the provider request states it. Enforcement on real actions
-arrives with the execution plane; in Phase 1 it is recorded, displayed and passed to providers.
+Supabase Auth + `profiles` roles (ADMIN / PRODUCTION_LEAD / TEAM_MEMBER / VIEWER). Tiers GREEN / AMBER
+/ RED are **enforced server-side by the gateway**: GREEN runs for any executor role; AMBER needs an
+approved `job_approvals` record by a lead/admin for the exact action; RED needs the calling user's own
+authorization for the exact action. See `docs/AUTH-AND-PERMISSIONS.md`.
 
 ## Persistence
 
@@ -121,5 +152,7 @@ recorded human decision. These rules are also seeded as DOCTRINE knowledge items
 
 ## Validation
 
-`npm run typecheck` · `npm test` (Vitest, 31 tests: artifacts, jobs, router fallback, knowledge,
-repository compatibility, store smoke) · `npm run build` · `npm run verify` (all three).
+`npm run typecheck` · `npm test` (Vitest, 70 tests: artifacts, jobs, router, knowledge, repository,
+store, gateway enforcement/validation/fallback/continuity, providers, HTTP surface, schemas, auth) ·
+`npm run security:scan` (bundle secret scan) · `npm run gateway:check` (Deno type-check + bundle) ·
+`npm run build` · `npm run verify` (typecheck + tests + security scan).

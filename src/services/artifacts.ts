@@ -7,7 +7,7 @@
  * exactly one implementation.
  */
 import type { Artifact, ArtifactStatus, ArtifactType, OSData, ProviderId } from "@/data/types";
-import { newId, nowIso } from "@/lib/utils";
+import { newId, nowIso } from "@/lib/core";
 
 export interface ArtifactTypeDef {
   type: ArtifactType;

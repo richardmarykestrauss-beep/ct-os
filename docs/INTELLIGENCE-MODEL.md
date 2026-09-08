@@ -60,7 +60,8 @@ anything, and `canExecuteSiteChanges` is false.
 
 `/knowledge` lists items by scope. For a CANDIDATE: **Approve as Agency knowledge**, **Approve for
 project only**, or **Reject**. For APPROVED non-doctrine items: **Deprecate**. Every decision records the
-reviewer ("Production Lead" in Phase 1 — real identities arrive with auth) and writes an activity event.
+reviewer (`reviewedBy` + `reviewedById` from the signed-in user; VIEWERs cannot decide) and writes an
+activity event carrying the actor id.
 The sidebar and Overview show how many candidates await review.
 
 ## Seeded DOCTRINE (APPROVED — these rules were already in force in the MVP)

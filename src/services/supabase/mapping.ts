@@ -27,13 +27,17 @@ export type TableName =
   | "knowledge_items"
   | "agent_lessons"
   | "integrations"
-  | "project_integrations";
+  | "project_integrations"
+  | "job_approvals"
+  | "execution_logs";
 
 export interface TableSpec {
   table: TableName;
   key: keyof OSData;
   /** camelCase domain fields whose type includes `null` (NULL must round-trip as null, not undefined). */
   nullable: string[];
+  /** Written only by the gateway (service role). The client reads it and never upserts/deletes. */
+  serverOwned?: boolean;
 }
 
 /** Insert/upsert order respects foreign keys; deletes run in reverse. */
@@ -49,15 +53,17 @@ export const TABLES: TableSpec[] = [
   { table: "qa_items", key: "qaItems", nullable: ["createdAt", "resolvedAt"] },
   { table: "launch_holds", key: "launchHolds", nullable: ["resolvedAt", "createdAt"] },
   { table: "gates", key: "gates", nullable: [] },
-  { table: "approvals", key: "approvals", nullable: ["decidedAt", "createdAt"] },
-  { table: "activity_events", key: "activity", nullable: ["projectId", "at"] },
-  { table: "agent_jobs", key: "agentJobs", nullable: ["outputArtifactId", "handoffId", "createdAt", "updatedAt", "startedAt", "completedAt"] },
-  { table: "agent_runs", key: "agentRuns", nullable: ["model", "inputTokens", "outputTokens", "startedAt", "finishedAt"] },
+  { table: "approvals", key: "approvals", nullable: ["decidedById", "decidedAt", "createdAt"] },
+  { table: "activity_events", key: "activity", nullable: ["projectId", "actorId", "at"] },
+  { table: "agent_jobs", key: "agentJobs", nullable: ["outputArtifactId", "handoffId", "requestedById", "createdAt", "updatedAt", "startedAt", "completedAt"] },
+  { table: "agent_runs", key: "agentRuns", nullable: ["model", "errorCategory", "validation", "latencyMs", "inputTokens", "outputTokens", "startedAt", "finishedAt"] },
   { table: "handoffs", key: "handoffs", nullable: ["outputArtifactId", "jobId", "runId", "createdAt", "updatedAt"] },
-  { table: "knowledge_items", key: "knowledgeItems", nullable: ["projectId", "jobId", "proposedByAgentId", "reviewedBy", "reviewedAt", "createdAt", "updatedAt"] },
-  { table: "agent_lessons", key: "agentLessons", nullable: ["projectId", "sourceArtifactId", "sourceJobId", "reviewedBy", "reviewedAt", "createdAt"] },
+  { table: "knowledge_items", key: "knowledgeItems", nullable: ["projectId", "jobId", "proposedByAgentId", "reviewedBy", "reviewedById", "reviewedAt", "createdAt", "updatedAt"] },
+  { table: "agent_lessons", key: "agentLessons", nullable: ["projectId", "sourceArtifactId", "sourceJobId", "reviewedBy", "reviewedById", "reviewedAt", "createdAt"] },
   { table: "integrations", key: "integrations", nullable: ["createdAt", "updatedAt"] },
   { table: "project_integrations", key: "projectIntegrations", nullable: ["credentialsRef", "createdAt", "updatedAt"] },
+  { table: "job_approvals", key: "jobApprovals", nullable: ["approvedById", "approvedByName", "approvedByRole", "createdAt", "decidedAt", "consumedAt", "expiresAt"] },
+  { table: "execution_logs", key: "executionLogs", nullable: ["runId", "providerId", "model", "validation", "artifactId", "errorCategory", "errorMessage", "usage", "latencyMs", "requestedById", "rawOutput", "startedAt", "finishedAt"], serverOwned: true },
 ];
 
 export function toSnake(key: string): string {
@@ -77,11 +83,15 @@ export function toRow(entity: object): Row {
   return row;
 }
 
+/** Columns that exist only for the gateway (leases). Never surfaced to the domain model. */
+const SERVER_ONLY_COLUMNS = new Set(["execution_claim_id", "execution_claimed_at"]);
+
 /** Row → domain object. NULL becomes `undefined` unless the field is declared nullable for the table. */
 export function fromRow<T extends object>(spec: TableSpec, row: Row): T {
   const nullable = new Set(spec.nullable);
   const out: Row = {};
   for (const [k, v] of Object.entries(row)) {
+    if (SERVER_ONLY_COLUMNS.has(k)) continue;
     const key = toCamel(k);
     if (v === null && !nullable.has(key)) continue;
     // numeric(3,2) comes back as a string from PostgREST.

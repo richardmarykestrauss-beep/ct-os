@@ -4,7 +4,7 @@ The Creative Touch Website Production Operating System — the control plane tha
 agents, workflow, approvals, artifacts, knowledge and execution history. Model providers (Claude,
 OpenAI, Gemini) are replaceable intelligence behind a neutral interface.
 
-Current phase: **CTOS-001 — Persistent Core + Provider-Neutral Agent Foundation.**
+Current phase: **CTOS-002 — Identity + Secure Execution Gateway + First Live Provider Adapter.**
 
 ## Run locally
 
@@ -18,8 +18,13 @@ Open http://localhost:5173
 Other scripts: `npm run typecheck`, `npm test` (Vitest), `npm run build` (typecheck + production build),
 `npm run verify` (typecheck + tests + build), `npm run preview`.
 
-Persistence: copy `.env.example` to `.env.local` and set the Supabase values after applying
-`supabase/migrations/0001_ctos_core.sql`. Without them the app runs on the in-memory U-Proof seed.
+Without a `.env.local` the app runs in **local mode**: sign in with a name and role, in-memory U-Proof
+seed, embedded gateway with stub providers. Copy `.env.example` to `.env.local`, apply both migrations
+in `supabase/migrations/`, and set the Supabase values for real identity, persistence and the
+server-side execution gateway (`OPENAI_API_KEY` on the gateway enables the first live provider).
+
+Security: `npm run security:scan` builds the bundle with canary secrets and fails if any reaches it.
+Gateway: `npm run gateway:check` type-checks the Edge Function under Deno and produces a deployable bundle.
 
 ## Stack
 
@@ -38,7 +43,10 @@ src/
     seed.ts           Real U-Proof project seed (no invented dates)
   state/
     os-store.tsx      In-memory store (context + reducer) — the ONLY data source the UI uses
-  ai/                 AIProvider interface, ModelRouter, provider stubs (no SDKs elsewhere)
+  auth/               Supabase Auth session + local-mode identity, sign-in gate
+  schemas/            Versioned Zod output schemas (structured-output validation)
+  ai/                 AIProvider interface, ModelRouter, OpenAI live adapter + provider seams
+  gateway/            Execution gateway core (auth, permission enforcement, records) + runtime wrappers
   services/
     repository.ts     OSRepository seam + createRepository(); supabase/ holds SupabaseRepository
     artifacts.ts      Versioned artifacts        agent-jobs.ts  Job lifecycle + execution
@@ -64,6 +72,9 @@ stub provider, records runs, produces a versioned artifact and a handoff — not
 * `docs/AGENT-ARCHITECTURE.md` — roster 00–08, provider policies, router, jobs, runs, artifacts, handoffs
 * `docs/INTELLIGENCE-MODEL.md` — knowledge scopes, learning rules, U-Proof lesson candidates
 * `docs/SUPABASE-SCHEMA.md` — tables, repository behaviour, setup
+* `docs/EXECUTION-GATEWAY.md` — server-side secret boundary, contracts, logging, deployment
+* `docs/AUTH-AND-PERMISSIONS.md` — identity, roles, GREEN/AMBER/RED enforcement
+* `docs/PROVIDER-ADAPTERS.md` — AIProvider interface, OpenAI adapter, fallback, validation, agent continuity
 
 ### Safety doctrine
 

@@ -7,7 +7,7 @@
  * DOCTRINE knowledge — the functions below enforce that structurally.
  */
 import type { AgentLesson, KnowledgeCategory, KnowledgeItem, KnowledgeScope, KnowledgeStatus, OSData } from "@/data/types";
-import { newId, nowIso } from "@/lib/utils";
+import { newId, nowIso } from "@/lib/core";
 
 export const KNOWLEDGE_SCOPES: { scope: KnowledgeScope; label: string; description: string }[] = [
   { scope: "DOCTRINE", label: "Doctrine", description: "Permanent Creative Touch rules. Human-authored only." },
@@ -18,7 +18,7 @@ export const KNOWLEDGE_SCOPES: { scope: KnowledgeScope; label: string; descripti
 
 export const KNOWLEDGE_SCOPE_LABELS: Record<KnowledgeScope, string> = { DOCTRINE: "Doctrine", AGENCY: "Agency", PROJECT: "Project", TASK: "Task" };
 
-export type Actor = { kind: "human"; name: string } | { kind: "agent"; agentId: string };
+export type Actor = { kind: "human"; name: string; id?: string | null } | { kind: "agent"; agentId: string };
 
 export class KnowledgePolicyError extends Error {
   constructor(message: string) {
@@ -64,6 +64,7 @@ export function proposeLesson(data: OSData, input: ProposeLessonInput): { data: 
     jobId: null,
     proposedByAgentId: input.agentId,
     reviewedBy: null,
+    reviewedById: null,
     reviewedAt: null,
     createdAt: at,
     updatedAt: at,
@@ -79,6 +80,7 @@ export function proposeLesson(data: OSData, input: ProposeLessonInput): { data: 
     source: input.source ?? `Proposed by ${input.agentId}`,
     status: "CANDIDATE",
     reviewedBy: null,
+    reviewedById: null,
     reviewedAt: null,
     createdAt: at,
   };
@@ -123,6 +125,7 @@ export function createKnowledgeItem(data: OSData, actor: Actor, input: CreateKno
     jobId: input.scope === "TASK" ? (input.jobId ?? null) : null,
     proposedByAgentId: actor.kind === "agent" ? actor.agentId : null,
     reviewedBy: actor.kind === "human" && status === "APPROVED" ? actor.name : null,
+    reviewedById: actor.kind === "human" && status === "APPROVED" ? (actor.id ?? null) : null,
     reviewedAt: actor.kind === "human" && status === "APPROVED" ? at : null,
     createdAt: at,
     updatedAt: at,
@@ -159,11 +162,12 @@ export function reviewKnowledgeItem(
     projectId: scope === "PROJECT" || scope === "TASK" ? (opts.projectId ?? existing.projectId) : null,
     status: decision,
     reviewedBy: reviewer.name,
+    reviewedById: reviewer.id ?? null,
     reviewedAt: at,
     updatedAt: at,
   };
   const agentLessons = data.agentLessons.map((l) =>
-    l.knowledgeItemId === itemId && l.status === "CANDIDATE" && decision !== "DEPRECATED" ? { ...l, status: decision, reviewedBy: reviewer.name, reviewedAt: at } : l,
+    l.knowledgeItemId === itemId && l.status === "CANDIDATE" && decision !== "DEPRECATED" ? { ...l, status: decision, reviewedBy: reviewer.name, reviewedById: reviewer.id ?? null, reviewedAt: at } : l,
   );
   return { data: { ...data, knowledgeItems: data.knowledgeItems.map((k) => (k.id === itemId ? item : k)), agentLessons }, item };
 }

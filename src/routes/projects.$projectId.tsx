@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tip } from "@/components/ui/tooltip";
 import { APPROVAL_GATE_LABELS, PHASE_LABELS, PROJECT_STATE_LABELS, PROJECT_TYPE_LABELS, allowedTransitions } from "@/data/state-machine";
 import type { ProjectPage, ProjectState } from "@/data/types";
-import { agentById, qaSeverityCounts, useOS, useProject } from "@/state/os-store";
+import { agentById, qaSeverityCounts, ticketRunState, useOS, useProject } from "@/state/os-store";
 import { cn, formatRelative } from "@/lib/utils";
 import { ARTIFACT_TYPE_LABELS } from "@/services/artifacts";
 import { JOB_STATUS_LABELS } from "@/services/agent-jobs";
@@ -48,8 +48,9 @@ function ProjectDetail() {
   const { tab } = Route.useSearch();
   const navigate = Route.useNavigate();
   const view = useProject(projectId);
-  const { data, actions } = useOS();
+  const { data, actions, user } = useOS();
   const [openTicket, setOpenTicket] = React.useState<string | null>(null);
+  const [runNote, setRunNote] = React.useState<string | null>(null);
 
   if (!view) {
     return (
@@ -74,6 +75,10 @@ function ProjectDetail() {
   const previewPage = pages.find((p) => p.title === "Homepage") ?? pages[0];
   const inFlight = (ticketId: string) => jobs.some((j) => j.ticketId === ticketId && (j.status === "RUNNING" || j.status === "WAITING_APPROVAL"));
   const runnable = nextTicket ?? tickets.find((t) => t.status === "BUILDING" && !inFlight(t.id));
+  const runnableAgent = runnable ? data.agents.find((a) => a.id === runnable.agentId) : null;
+  const runnableState = runnable ? ticketRunState(data, runnable.id, user) : null;
+  const runnableTier = runnableState?.check?.level ?? runnableAgent?.permissionLevel ?? "GREEN";
+  const canRun = !!runnable && user.role !== "VIEWER";
   const reviewable = tickets.find((t) => t.status === "REVIEW" || t.approvalState === "PENDING") ?? lastCompletedTicket;
   const pendingGate = approvals.find((a) => a.status === "PENDING");
 
@@ -120,8 +125,21 @@ function ProjectDetail() {
         }
         actions={
           <>
-            <Tip label={runnable ? `Runs ${runnable.code} (mock — moves to Review)` : "No queued ticket to run"}>
-              <Button variant="accent" size="sm" disabled={!runnable} onClick={() => runnable && actions.runTicket(runnable.id)}>
+            <Tip label={runnable ? `Runs ${runnable.code} through the execution gateway (${runnableTier}${runnableState?.check?.outcome === "denied" ? " — needs approval first" : ""})` : user.role === "VIEWER" ? "Viewers cannot run jobs" : "No queued ticket to run"}>
+              <Button
+                variant="accent"
+                size="sm"
+                disabled={!canRun}
+                onClick={async () => {
+                  if (!runnable) return;
+                  setRunNote(null);
+                  const outcome = await actions.runTicket(runnable.id);
+                  if (outcome.kind === "needs_approval") setRunNote(`${runnable.code} is ${outcome.level}: ${outcome.reason}. See Approvals.`);
+                  else if (outcome.kind === "skipped") setRunNote(outcome.reason);
+                  else if (!outcome.response.ok) setRunNote(`Gateway refused: ${outcome.response.message}`);
+                  else if (outcome.response.result.status !== "COMPLETED") setRunNote(`Job ${outcome.response.result.status.toLowerCase().replace("_", " ")}: ${outcome.response.result.error?.message ?? ""}`);
+                }}
+              >
                 <Play /> Run Next Ticket
               </Button>
             </Tip>
@@ -155,6 +173,8 @@ function ProjectDetail() {
           </>
         }
       />
+
+      {runNote ? <div className="mb-3 rounded-md border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">{runNote}</div> : null}
 
       <Tabs value={tab ?? "overview"} onValueChange={(v) => setTab(v as Tab)}>
         <TabsList>
@@ -488,13 +508,13 @@ function ProjectDetail() {
             <Table>
               <THead>
                 <TR>
-                  <TH>Job</TH>
                   <TH>Agent</TH>
-                  <TH>Status</TH>
+                  <TH>Task</TH>
                   <TH className="hidden md:table-cell">Provider</TH>
-                  <TH className="hidden md:table-cell">Attempts</TH>
-                  <TH className="hidden lg:table-cell">Handoff</TH>
-                  <TH className="hidden lg:table-cell">Output</TH>
+                  <TH>Status</TH>
+                  <TH className="hidden md:table-cell">Duration</TH>
+                  <TH className="hidden lg:table-cell">Attempts</TH>
+                  <TH className="hidden lg:table-cell">Output artifact</TH>
                   <TH></TH>
                 </TR>
               </THead>
@@ -508,24 +528,31 @@ function ProjectDetail() {
                   const source = handoff ? agentById(data, handoff.sourceAgentId) : null;
                   const output = j.outputArtifactId ? artifacts.find((a) => a.id === j.outputArtifactId) : null;
                   const cancellable = j.status === "QUEUED" || j.status === "RUNNING" || j.status === "WAITING_APPROVAL";
+                  const durationMs = j.startedAt && j.completedAt ? new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime() : winner?.latencyMs ?? (j.startedAt && j.updatedAt && j.status !== "QUEUED" ? new Date(j.updatedAt).getTime() - new Date(j.startedAt).getTime() : null);
                   return (
                     <TR key={j.id}>
+                      <TD className="text-xs">
+                        <div className="font-medium text-ink">{agent ? `${agent.shortCode} ${agent.name}` : "—"}</div>
+                        {handoff ? <div className="text-[11px] text-muted">from {source?.shortCode ?? "?"} · {handoff.status.toLowerCase()}</div> : null}
+                      </TD>
                       <TD>
                         <div className="font-medium">{ticket?.code ?? j.taskType}</div>
-                        <div className="text-[11px] text-muted">{j.taskType.replace(/_/g, " ")}</div>
-                      </TD>
-                      <TD className="text-xs">{agent ? `${agent.shortCode} ${agent.name}` : "—"}</TD>
-                      <TD>
-                        <Badge tone={j.status === "COMPLETED" ? "ok" : j.status === "FAILED" ? "danger" : j.status === "WAITING_APPROVAL" ? "warn" : j.status === "RUNNING" ? "accent" : "neutral"}>{JOB_STATUS_LABELS[j.status]}</Badge>
+                        <div className="text-[11px] text-muted">
+                          {j.taskType.replace(/_/g, " ")} · <span className="font-mono">{j.permissionLevel}</span>
+                        </div>
                       </TD>
                       <TD className="hidden text-xs md:table-cell">
                         {winner ? PROVIDER_LABELS[winner.providerId] : <span className="text-muted">preferred {PROVIDER_LABELS[j.preferredProvider]}</span>}
+                        {winner?.model ? <span className="text-muted"> · {winner.model}</span> : null}
                         {winner && winner.providerId !== j.preferredProvider ? <span className="text-warn"> (fallback)</span> : null}
                       </TD>
-                      <TD className="hidden text-xs md:table-cell">
-                        {jobRuns.length ? jobRuns.map((r) => `${PROVIDER_LABELS[r.providerId]}: ${r.status.toLowerCase()}`).join(" · ") : <span className="text-faint">—</span>}
+                      <TD>
+                        <Badge tone={j.status === "COMPLETED" ? "ok" : j.status === "FAILED" ? "danger" : j.status === "WAITING_APPROVAL" ? "warn" : j.status === "RUNNING" ? "accent" : "neutral"}>{JOB_STATUS_LABELS[j.status]}</Badge>
                       </TD>
-                      <TD className="hidden text-xs lg:table-cell">{handoff ? `${source?.shortCode ?? "?"} → ${agent?.shortCode ?? "?"} · ${handoff.status.toLowerCase()}` : <span className="text-faint">—</span>}</TD>
+                      <TD className="hidden font-mono text-xs md:table-cell">{durationMs !== null && durationMs >= 0 ? formatDuration(durationMs) : <span className="text-faint">—</span>}</TD>
+                      <TD className="hidden text-xs lg:table-cell">
+                        {jobRuns.length ? jobRuns.map((r) => `${PROVIDER_LABELS[r.providerId]} — ${r.status.toLowerCase().replace("_", " ")}`).join(" · ") : <span className="text-faint">—</span>}
+                      </TD>
                       <TD className="hidden text-xs lg:table-cell">{output ? `${output.title} v${output.version}` : j.error ? <span className="text-danger">{j.error}</span> : <span className="text-faint">—</span>}</TD>
                       <TD>
                         {cancellable ? (
@@ -547,7 +574,7 @@ function ProjectDetail() {
               </TBody>
             </Table>
           </Card>
-          <p className="mt-2 text-[11px] text-muted">Every job records each provider attempt. Providers are stubs until their adapters are connected.</p>
+          <p className="mt-2 text-[11px] text-muted">Every job records each provider attempt, including validation failures and fallbacks. Executions go through the gateway, which enforces the permission tier server-side.</p>
         </TabsContent>
 
         {/* ------------------------------------------------------------ QA */}
@@ -664,6 +691,12 @@ function ProjectDetail() {
       <TicketDrawer ticketId={openTicket} onClose={() => setOpenTicket(null)} />
     </>
   );
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
 function Count({ n, tone = "neutral" }: { n: number; tone?: "neutral" | "danger" | "warn" }) {

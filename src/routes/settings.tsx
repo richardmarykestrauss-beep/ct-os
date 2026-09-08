@@ -8,7 +8,8 @@ import { KNOWLEDGE_SCOPES } from "@/services/knowledge";
 import { PERMISSION_MODEL } from "@/data/state-machine";
 import { useOS } from "@/state/os-store";
 import { cn } from "@/lib/utils";
-import { PROVIDER_LABELS } from "@/ai/registry";
+import { useGatewayHealth } from "@/gateway/useGatewayHealth";
+import { ProviderStateBadge } from "@/components/os/status";
 import { BookOpen, Cpu, Database, Plug, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -20,8 +21,8 @@ const TIER_CLS = {
 };
 
 function SettingsPage() {
-  const { data, status, router } = useOS();
-  const providers = router.providers();
+  const { data, status } = useOS();
+  const { health, error: healthError, loading: healthLoading } = useGatewayHealth();
   return (
     <>
       <PageHeader title="Settings" subtitle="Store, intelligence providers, integrations, safety doctrine and permission model." />
@@ -44,18 +45,25 @@ function SettingsPage() {
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
               <Cpu className="size-3.5" /> Intelligence providers
             </div>
-            <p className="mt-1 text-xs text-ink-2">Agents keep their identity; the model behind them is a per-agent policy (preferred → fallback). The router picks by policy, capability and availability.</p>
-            <ul className="mt-2 grid gap-1">
-              {providers.map((p) => (
-                <li key={p.id} className="flex items-center justify-between text-[11px]">
-                  <span className="text-ink">{PROVIDER_LABELS[p.id]}</span>
-                  <span className="flex items-center gap-1">
-                    {p.configured ? <Badge tone="info">key present</Badge> : null}
-                    <Badge tone={p.connected ? "ok" : "neutral"}>{p.connected ? "Connected" : "Stub — not connected"}</Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className="mt-1 text-xs text-ink-2">Agents keep their identity; the model behind them is a per-agent policy (preferred → fallback). Provider keys live only in the execution gateway.</p>
+            <div className="mt-2 text-[11px] text-muted">
+              Gateway: <Badge tone={status.gatewayKind === "http" ? "ok" : "outline"}>{status.gatewayKind === "http" ? "Server-side (Supabase)" : "Embedded — local mode, stubs only"}</Badge>
+            </div>
+            {healthLoading ? <div className="mt-2 text-[11px] text-muted">Checking providers…</div> : null}
+            {healthError ? <div className="mt-2 text-[11px] text-danger">{healthError}</div> : null}
+            {health ? (
+              <ul className="mt-2 grid gap-1">
+                {health.providers.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-ink">{p.label}</span>
+                    <span className="flex items-center gap-1" title={p.reason ?? undefined}>
+                      <ProviderStateBadge state={p.state} />
+                      {p.state === "not_configured" ? <span className="font-mono text-[10px] text-faint">{p.envVar}</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <div className="rounded-md border bg-canvas px-3 py-2.5">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">

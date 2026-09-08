@@ -123,6 +123,27 @@ export function TicketApprovalBadge({ state }: { state: TicketApprovalState }) {
   return <Badge tone={TICKET_APPROVAL_TONE[state]}>{TICKET_APPROVAL_LABEL[state]}</Badge>;
 }
 
+const PROVIDER_STATE: Record<"connected" | "not_configured" | "stub", { tone: Tone; label: string }> = {
+  connected: { tone: "ok", label: "Connected" },
+  not_configured: { tone: "neutral", label: "Not configured" },
+  stub: { tone: "outline", label: "Stub" },
+};
+
+const TIER_CLS: Record<"GREEN" | "AMBER" | "RED", string> = {
+  GREEN: "border-ok/40 bg-ok-soft text-ok",
+  AMBER: "border-warn/40 bg-warn-soft text-warn",
+  RED: "border-danger/40 bg-danger-soft text-danger",
+};
+
+export function PermissionTierBadge({ tier }: { tier: "GREEN" | "AMBER" | "RED" }) {
+  return <span className={cn("inline-flex rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold", TIER_CLS[tier])}>{tier}</span>;
+}
+
+export function ProviderStateBadge({ state }: { state: "connected" | "not_configured" | "stub" }) {
+  const s = PROVIDER_STATE[state];
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
 export function HoldBadge({ label = "Hold" }: { label?: string }) {
   return (
     <Badge tone="hold">

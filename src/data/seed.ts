@@ -522,9 +522,9 @@ const qaItems: QAItem[] = [
 // Approvals
 // ---------------------------------------------------------------------------
 const approvals: Approval[] = [
-  { id: "appr_up_strategy", projectId: PROJECT_UPROOF, gate: "STRATEGY", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedAt: null, createdAt: null },
-  { id: "appr_up_design", projectId: PROJECT_UPROOF, gate: "DESIGN", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedAt: null, createdAt: null },
-  { id: "appr_up_staging", projectId: PROJECT_UPROOF, gate: "STAGING_BUILD", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedAt: null, createdAt: null },
+  { id: "appr_up_strategy", projectId: PROJECT_UPROOF, gate: "STRATEGY", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedById: null, decidedAt: null, createdAt: null },
+  { id: "appr_up_design", projectId: PROJECT_UPROOF, gate: "DESIGN", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedById: null, decidedAt: null, createdAt: null },
+  { id: "appr_up_staging", projectId: PROJECT_UPROOF, gate: "STAGING_BUILD", requestedBy: "Orchestrator", status: "APPROVED", decidedBy: "Production Lead", decidedById: null, decidedAt: null, createdAt: null },
   {
     id: "appr_up_launch",
     projectId: PROJECT_UPROOF,
@@ -532,6 +532,7 @@ const approvals: Approval[] = [
     requestedBy: "Orchestrator",
     status: "PENDING",
     notes: "QA is zero at every severity, but launch requires human approval and resolution of open launch holds. It will not auto-approve.",
+    decidedById: null,
     decidedAt: null,
     createdAt: null,
   },
@@ -692,6 +693,7 @@ function knowledge(seed: Pick<KnowledgeItem, "id" | "scope" | "category" | "titl
     jobId: null,
     proposedByAgentId: null,
     reviewedBy: null,
+    reviewedById: null,
     reviewedAt: null,
     createdAt: null,
     updatedAt: null,
@@ -789,6 +791,7 @@ const agentLessons: AgentLesson[] = uproofLessonSeeds.map(([key]) => ({
   source: "CTOS-001 seed — lesson candidates supplied from the U-Proof build and QA history",
   status: "CANDIDATE",
   reviewedBy: null,
+  reviewedById: null,
   reviewedAt: null,
   createdAt: null,
 }));
@@ -826,6 +829,7 @@ const activity: ActivityEvent[] = activitySeeds.map(([ref, kind, message, actor]
   ref,
   message,
   actor,
+  actorId: null,
   at: null,
   order: i + 1,
 }));
@@ -852,4 +856,6 @@ export const seedData: OSData = {
   agentLessons,
   integrations,
   projectIntegrations: [],
+  jobApprovals: [],
+  executionLogs: [],
 };

@@ -1,0 +1,16 @@
+{
+  "imports": {
+    "@/": "../../../src/",
+    "zod": "npm:zod@^4.1.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.45.0"
+  },
+  "compilerOptions": {
+    "lib": [
+      "deno.window"
+    ],
+    "strict": true
+  },
+  "unstable": [
+    "sloppy-imports"
+  ]
+}

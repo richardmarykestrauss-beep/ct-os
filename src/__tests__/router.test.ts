@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { seedData } from "@/data/seed";
 import { ModelRouter } from "@/ai/router";
 import { ProviderRegistry } from "@/ai/registry";
-import { ClaudeProvider } from "@/ai/providers/claude";
-import { OpenAIProvider } from "@/ai/providers/openai";
-import { GeminiProvider } from "@/ai/providers/gemini";
+import { StubProvider } from "@/ai/providers/stub";
+const ClaudeProvider = (opts: Partial<ConstructorParameters<typeof StubProvider>[0]> = {}) => new StubProvider({ id: "claude", ...opts });
+const OpenAIProvider = (opts: Partial<ConstructorParameters<typeof StubProvider>[0]> = {}) => new StubProvider({ id: "openai", ...opts });
+const GeminiProvider = (opts: Partial<ConstructorParameters<typeof StubProvider>[0]> = {}) => new StubProvider({ id: "gemini", ...opts });
 import { NoProviderAvailableError } from "@/ai/types";
 import { buildProviderRequest, createJob, executeJob } from "@/services/agent-jobs";
 
@@ -17,51 +18,52 @@ function jobFor(agentId: string) {
 
 describe("model router", () => {
   it("uses the preferred provider when it is available", async () => {
-    const claude = new ClaudeProvider();
-    const router = new ModelRouter({ registry: new ProviderRegistry([claude, new OpenAIProvider(), new GeminiProvider()]) });
-    const { job, request } = jobFor("agent_02"); // prefers claude
-    const result = await router.execute(job, request);
+    const claude = ClaudeProvider();
+    const router = new ModelRouter({ registry: new ProviderRegistry([claude, OpenAIProvider(), GeminiProvider()]) });
+    const { request } = jobFor("agent_02"); // prefers claude
+    const result = await router.execute(request);
     expect(result.providerId).toBe("claude");
     expect(claude.calls.length).toBe(1);
-    expect(result.attempts).toEqual([expect.objectContaining({ providerId: "claude", outcome: "succeeded" })]);
+    expect(result.attempts).toEqual([expect.objectContaining({ providerId: "claude", outcome: "succeeded", validation: expect.objectContaining({ ok: true }) })]);
   });
 
   it("falls back in sequence when the preferred provider fails", async () => {
-    const claude = new ClaudeProvider({ failWith: "rate limited" });
-    const openai = new OpenAIProvider();
-    const router = new ModelRouter({ registry: new ProviderRegistry([claude, openai, new GeminiProvider()]) });
-    const { job, request } = jobFor("agent_02"); // claude → openai
-    const result = await router.execute(job, request);
+    const claude = ClaudeProvider({ failWith: "rate limited" });
+    const openai = OpenAIProvider();
+    const router = new ModelRouter({ registry: new ProviderRegistry([claude, openai, GeminiProvider()]) });
+    const { request } = jobFor("agent_02"); // claude → openai
+    const result = await router.execute(request);
     expect(result.providerId).toBe("openai");
     expect(result.attempts.map((a) => [a.providerId, a.outcome])).toEqual([
       ["claude", "failed"],
       ["openai", "succeeded"],
     ]);
+    expect(result.attempts[0].errorCategory).toBe("provider_error");
     expect(result.attempts[0].error).toBe("rate limited");
   });
 
   it("skips unavailable providers before trying them", async () => {
-    const router = new ModelRouter({ registry: new ProviderRegistry([new ClaudeProvider({ available: false, unavailableReason: "no key" }), new OpenAIProvider(), new GeminiProvider()]) });
-    const { job } = jobFor("agent_02");
-    const plan = await router.plan(job);
+    const router = new ModelRouter({ registry: new ProviderRegistry([ClaudeProvider({ available: false, unavailableReason: "no key" }), OpenAIProvider(), GeminiProvider()]) });
+    const { request } = jobFor("agent_02");
+    const plan = await router.plan(request);
     expect(plan.order).toEqual(["openai"]);
     expect(plan.excluded).toEqual([{ providerId: "claude", reason: "no key" }]);
   });
 
   it("filters providers that lack a required capability", async () => {
     // Agent 03 needs vision; give OpenAI no vision capability.
-    const openai = new OpenAIProvider({ capabilities: ["text", "structured_output"] });
-    const router = new ModelRouter({ registry: new ProviderRegistry([new ClaudeProvider({ failWith: "down" }), openai, new GeminiProvider()]) });
-    const { job, request } = jobFor("agent_03"); // claude → openai → gemini
-    const result = await router.execute(job, request);
+    const openai = OpenAIProvider({ capabilities: ["text", "structured_output"] });
+    const router = new ModelRouter({ registry: new ProviderRegistry([ClaudeProvider({ failWith: "down" }), openai, GeminiProvider()]) });
+    const { request } = jobFor("agent_03"); // claude → openai → gemini
+    const result = await router.execute(request);
     expect(result.providerId).toBe("gemini");
     expect(result.attempts.map((a) => a.providerId + ":" + a.outcome)).toEqual(["claude:failed", "openai:skipped", "gemini:succeeded"]);
   });
 
   it("throws NoProviderAvailableError with every attempt when all fail, and executeJob records a FAILED job", async () => {
-    const router = new ModelRouter({ registry: new ProviderRegistry([new ClaudeProvider({ failWith: "a" }), new OpenAIProvider({ failWith: "b" })]) });
+    const router = new ModelRouter({ registry: new ProviderRegistry([ClaudeProvider({ failWith: "a" }), OpenAIProvider({ failWith: "b" })]) });
     const { data, job, request } = jobFor("agent_02");
-    await expect(router.execute(job, request)).rejects.toBeInstanceOf(NoProviderAvailableError);
+    await expect(router.execute(request)).rejects.toBeInstanceOf(NoProviderAvailableError);
     const outcome = await executeJob(data, job.id, router);
     expect(outcome.job.status).toBe("FAILED");
     expect(outcome.job.error).toMatch(/claude \(failed: a\); openai \(failed: b\)/);
@@ -70,9 +72,9 @@ describe("model router", () => {
   });
 
   it("respects a settings-level provider allow-list", async () => {
-    const router = new ModelRouter({ registry: new ProviderRegistry([new ClaudeProvider(), new OpenAIProvider(), new GeminiProvider()]), enabledProviders: ["openai"] });
-    const { job } = jobFor("agent_02");
-    const plan = await router.plan(job);
+    const router = new ModelRouter({ registry: new ProviderRegistry([ClaudeProvider(), OpenAIProvider(), GeminiProvider()]), enabledProviders: ["openai"] });
+    const { request } = jobFor("agent_02");
+    const plan = await router.plan(request);
     expect(plan.order).toEqual(["openai"]);
     expect(plan.excluded[0]).toEqual({ providerId: "claude", reason: "disabled in settings" });
   });

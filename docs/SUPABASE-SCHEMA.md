@@ -1,6 +1,7 @@
 # Supabase Schema and Persistence
 
-Migration: `supabase/migrations/0001_ctos_core.sql`. Environment template: `.env.example`.
+Migrations: `supabase/migrations/0001_ctos_core.sql` (core) and `0002_identity_gateway.sql`
+(profiles, job approvals, execution logs, identity columns, role-aware RLS). Environment template: `.env.example`.
 
 ## Conventions
 
@@ -13,7 +14,7 @@ Migration: `supabase/migrations/0001_ctos_core.sql`. Environment template: `.env
   `T | null` are listed per table in `TABLES[].nullable` so NULL survives as `null`. Rows round-trip
   byte-for-byte (tested).
 
-## Tables (20)
+## Tables (23)
 
 | Table | OSData key | Notes |
 |---|---|---|
@@ -37,18 +38,25 @@ Migration: `supabase/migrations/0001_ctos_core.sql`. Environment template: `.env
 | agent_lessons | agentLessons | ledger; FK knowledge item cascade |
 | integrations | integrations | plane: control / execution / intelligence; `provider_id` for intelligence rows |
 | project_integrations | projectIntegrations | non-secret `config` jsonb + `credentials_ref` pointer; unique (project, integration) |
+| profiles | — (auth) | `id` = auth.users.id, `display_name`, `role`; auto-created on sign-up (first user ADMIN) |
+| job_approvals | jobApprovals | AMBER approvals / RED authorizations bound to `job_id` + `action_fingerprint`; approver id/name/role |
+| execution_logs | executionLogs | one row per provider attempt; written by the gateway only (`serverOwned` in the client mapping) |
+
+Identity columns added in 0002: `approvals.decided_by_id`, `activity_events.actor_id`,
+`knowledge_items.reviewed_by_id`, `agent_lessons.reviewed_by_id`, `agent_jobs.requested_by_id`
+(all uuid → profiles). `agent_runs` gained `error_category`, `validation` (jsonb), `latency_ms`.
 
 Guard rails in the migration:
 
 * `knowledge_review_guard` trigger: a non-TASK `knowledge_items` row may leave CANDIDATE only with a
   human `reviewed_by` (null or `agent…` is refused).
-* RLS is enabled on every table with a permissive policy for the `authenticated` role. There is no auth
-  in CT-OS yet (next ticket). A commented-out `anon` policy exists for local development only — do not
-  ship it.
+* RLS is enabled on every table. Since 0002: any authenticated user may read; writes require
+  `ctos_role() <> 'VIEWER'`; `execution_logs` are readable by ADMIN/PRODUCTION_LEAD and written only by
+  the gateway (service role). See `docs/AUTH-AND-PERMISSIONS.md`.
 
 ## Repository behaviour (`src/services/supabase/repository.ts`)
 
-* `load()` reads all 20 tables and assembles `OSData`. If `projects` is empty the database is
+* `load()` reads all 22 data tables and assembles `OSData`. If `projects` is empty the database is
   considered fresh: the U-Proof seed is returned and `bootstrapped = true`; the first `persist()`
   writes it. So a new database starts exactly like the in-memory app.
 * `persist(data)` diffs each table against the last state known to be in the database (per row,
@@ -77,15 +85,17 @@ back to the in-memory seed and shows the error reason in Settings; the app keeps
 1. Create a Supabase project. Run `supabase/migrations/0001_ctos_core.sql` in the SQL editor (or
    `supabase db push`).
 2. Copy `.env.example` → `.env.local`; set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. Until auth exists, either sign in a user through Supabase Auth in the browser session, or (local dev
-   only) enable the commented `anon` policy.
-4. Start the app; Settings shows "Supabase". The first load seeds U-Proof.
+3. Create the first user in Supabase Auth (email + password); the trigger makes them ADMIN.
+4. For `npm run dev`, also set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` in
+   `.env.local` (server-only — the Vite middleware serves the gateway). For production, set them as
+   Edge Function secrets and deploy `agent-execute`.
+5. Start the app, sign in; Settings shows "Supabase" and "Server-side" gateway. The first load seeds U-Proof.
 
 ## Known limits (Phase 1)
 
 * Full-snapshot diffing is O(rows) per persist; fine at agency scale, replaced by per-action writes
   when the API layer exists.
 * No realtime subscriptions; another browser will not see changes until reload.
-* No auth, so no `user_id`/audit columns yet. `reviewed_by`, `decided_by` and `actor` are plain text
-  ("Production Lead") until identities arrive.
-* `artifacts.content` is stored as-is; schema validation per `type@schemaVersion` is a follow-up.
+* Column-level write restrictions (e.g. permission tiers ADMIN-only) are not yet in place — see the
+  known gap in `docs/AUTH-AND-PERMISSIONS.md`.
+* `artifacts.content` produced by the gateway is schema-validated (`type@schemaVersion`); seeded/human-authored content is stored as-is.

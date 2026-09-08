@@ -7,6 +7,8 @@ import { useOS } from "@/state/os-store";
 import { cn, formatRelative } from "@/lib/utils";
 import type { AgentStatus, ProviderId } from "@/data/types";
 import { PROVIDER_IDS, PROVIDER_LABELS } from "@/ai/registry";
+import { useGatewayHealth } from "@/gateway/useGatewayHealth";
+import { ProviderStateBadge } from "@/components/os/status";
 import { Bot, Crown } from "lucide-react";
 
 export const Route = createFileRoute("/agents")({ component: AgentsPage });
@@ -19,7 +21,10 @@ const RING: Record<AgentStatus, string> = {
 };
 
 function AgentsPage() {
-  const { data, actions } = useOS();
+  const { data, actions, user } = useOS();
+  const { health } = useGatewayHealth();
+  const providerState = (id: ProviderId) => health?.providers.find((p) => p.id === id) ?? null;
+  const canEdit = user.role === "ADMIN" || user.role === "PRODUCTION_LEAD";
   const counts = data.agents.reduce<Record<AgentStatus, number>>(
     (acc, a) => ({ ...acc, [a.status]: acc[a.status] + 1 }),
     { IDLE: 0, WORKING: 0, WAITING_APPROVAL: 0, BLOCKED: 0 },
@@ -85,7 +90,7 @@ function AgentsPage() {
                   <span className="num font-medium">{a.outputsProduced}</span>
                 </Field>
                 <Field label="Preferred provider">
-                  <NativeSelect className="h-7 text-xs" value={a.providerPolicy.preferred} onChange={(e) => actions.setAgentProvider(a.id, { preferred: e.target.value as ProviderId })}>
+                  <NativeSelect className="h-7 text-xs" disabled={!canEdit} value={a.providerPolicy.preferred} onChange={(e) => actions.setAgentProvider(a.id, { preferred: e.target.value as ProviderId })}>
                     {PROVIDER_IDS.map((p) => (
                       <option key={p} value={p}>
                         {PROVIDER_LABELS[p]}
@@ -96,6 +101,7 @@ function AgentsPage() {
                 <Field label="Fallback provider">
                   <NativeSelect
                     className="h-7 text-xs"
+                    disabled={!canEdit}
                     value={fallback ?? ""}
                     onChange={(e) => {
                       const v = e.target.value as ProviderId | "";
@@ -112,6 +118,19 @@ function AgentsPage() {
                   </NativeSelect>
                   {a.providerPolicy.fallbacks.length > 1 ? <div className="mt-0.5 text-[11px] text-muted">then {a.providerPolicy.fallbacks.slice(1).map((p) => PROVIDER_LABELS[p]).join(", ")}</div> : null}
                   {a.providerPolicy.reviewer ? <div className="mt-0.5 text-[11px] text-muted">Reviewer: {PROVIDER_LABELS[a.providerPolicy.reviewer]}</div> : null}
+                </Field>
+                <Field label="Current availability">
+                  <div className="flex flex-wrap gap-1">
+                    {[a.providerPolicy.preferred, ...a.providerPolicy.fallbacks].map((p) => {
+                      const st = providerState(p);
+                      return (
+                        <span key={p} className="inline-flex items-center gap-1 text-[11px]" title={st?.reason ?? undefined}>
+                          <span className="text-muted">{PROVIDER_LABELS[p]}</span>
+                          {st ? <ProviderStateBadge state={st.state} /> : <span className="text-faint">…</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </Field>
                 <Field label="Permission">
                   <span className={cn("rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold", a.permissionLevel === "GREEN" ? "border-ok/40 bg-ok-soft text-ok" : a.permissionLevel === "AMBER" ? "border-warn/40 bg-warn-soft text-warn" : "border-danger/40 bg-danger-soft text-danger")}>
