@@ -1,0 +1,21 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 4/7 - Agent 04 SEO & Content Architect",
+  "agent": {
+    "code": "A04",
+    "shortCode": "04",
+    "name": "SEO & Content Architect",
+    "role": "SEO architecture, page copy, metadata, internal linking",
+    "responsibilities": ["SEO architecture", "Page copy", "Metadata", "Internal linking", "Content mapping"],
+    "requiredCapabilities": ["text", "structured_output", "long_context"],
+    "permissionLevel": "GREEN"
+  },
+  "taskType": "seo_content",
+  "instructions": "TASK: Produce a content_pack@1 for U-Proof (South African waterproofing/building-products ecommerce company), based on the attached research_report, site_blueprint and design_system input artifacts.\n\nTHIS IS THE \"KNOWN\" (non-blind) SIDE of a two-project agent benchmark (CTOS-004A Part Q). Ground your SEO architecture and page copy in the real sitemap you were given (site_blueprint), the real product categories and pricing in PROJECT FACTS knowledge, and the real technical findings from research (do not invent products, prices or pages that were not given to you).\n\nSpecifically: metadata/copy for the Shop page should account for the real finding that it currently only renders 1 of 5 categories (write the copy assuming the fix lands, but do not claim in customer-facing copy that something is fixed if it is not yet); do not write page copy that repeats the wrong R500 Fibre Filler 20L price - use the real price (R1590) from PROJECT FACTS; for the fake blog-teaser articles (Surface Preparation Guide, How to Apply Liquid Rubber, FAQs) that research found were placeholder/fake, write them as REAL commissioned articles (real informative content, not placeholders) since the site_blueprint routed them under Help & Advice as real pages needing real content - flag in your own summary that you are the agent producing the real content for what was previously a fake teaser, so a human reviewer can see that gap has been closed by this pass.\n\nProduce a content_pack@1: summary; seoArchitecture; pages (path, title, metaDescription, h1, sections) for the pages in the site_blueprint's sitemap that most need real content (Home, Shop, at least 2 product category pages, and the 3 Help & Advice articles); internalLinking.",
+  "requiredOutputSchema": "content_pack@1",
+  "knowledgeFile": "knowledge.json",
+  "inputs": [
+    { "file": "stage1-out.json", "id": "art_bench_up_research", "type": "research_report", "title": "U-Proof Research & Discovery Report (benchmark)" },
+    { "file": "stage2-out.json", "id": "art_bench_up_blueprint", "type": "site_blueprint", "title": "U-Proof UX Site Blueprint (benchmark)" },
+    { "file": "stage3-out.json", "id": "art_bench_up_design", "type": "design_system", "title": "U-Proof Design System (benchmark)" }
+  ]
+}

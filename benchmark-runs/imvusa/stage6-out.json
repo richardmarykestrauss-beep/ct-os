@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "runLabel": "IMVUSA (blind) - Stage 6/7 - Agent 06 QA & Launch Auditor",
+  "elapsedMs": 27969,
+  "providerId": "claude",
+  "model": "claude-sonnet-5",
+  "usage": {
+    "inputTokens": 14416,
+    "outputTokens": 2463
+  },
+  "finishReason": "complete",
+  "output": {
+    "summary": "Independent QA review of planning artifacts (research_report, site_blueprint, design_system, content_pack, build_plan) for Imvusa Furniture. The pipeline handles the two core contact mismatches reasonably well on paper: content_pack and build_plan both commit to a single canonical Contact Block and explicitly refuse to guess between the conflicting George phone number / Bloemfontein address, deferring to AMBER human-confirmation tickets rather than silently picking one. The duplicated Services list and Hertex/Hertext spelling issues are also explicitly ticketed and addressed with a single-authoritative-list and standardized-spelling approach. design_system's 'no real visual input' limitation is carried forward honestly and prominently (explicit DISCLOSURE block, all values marked PROPOSED - verify, AMBER gating on the global style ticket). However, several defects remain: (1) content_pack's own summary text still contains the literal historical mismatch values in places, and because content_pack was only provided as a truncated preview, I cannot fully verify that NO page in the pack re-authors contact details outside the canonical block — this is a material verification gap, not a clean pass. (2) The image CAPTCHA discrepancy/security-accessibility risk flagged in research_report is never mentioned again in site_blueprint, design_system, content_pack, or build_plan — it appears to have been silently dropped rather than ticketed or explicitly deferred. (3) content_pack and site_blueprint both add net-new pages (Get a Quote, About, Fabrics & Collections, location subpages) beyond the five pages research_report actually audited; while framed as blueprint-justified extensions and not fabricating new services/locations/awards, build_plan's scope includes these without a visible traceability note tying each new page back to explicit approval rather than agent-invented scope creep. (4) No invented services, locations, certifications, or awards were found — this claim is honestly self-limited and appears consistent with source evidence. (5) Because content_pack and build_plan content bodies were truncated in this handoff, this review cannot certify full-document consistency; readiness is capped accordingly.",
+    "result": "ISSUES_FOUND",
+    "defects": [
+      {
+        "title": "CAPTCHA discrepancy/accessibility-security risk raised in research_report is dropped from all downstream artifacts",
+        "severity": "P1",
+        "category": "Traceability / Dropped Issue",
+        "evidence": "research_report explicitly flags an inline image CAPTCHA appearing as extracted plain text on both Home ('select the cup') and Contact Us ('select the heart') with differing prompts, and raises security/accessibility implications requiring review. Neither site_blueprint, design_system, content_pack, nor build_plan mention CAPTCHA, this risk, or any ticket to investigate/remediate it. An issue raised in Stage 1 has not been visibly carried forward or explicitly deferred with rationale — it has simply disappeared from the pipeline."
+      },
+      {
+        "title": "content_pack and build_plan bodies were only supplied truncated/preview text, preventing full verification of the 'one authoritative contact block' claim",
+        "severity": "P1",
+        "category": "Verification Gap",
+        "evidence": "content_pack v1 content field is marked \"_truncated\":true with only a \"preview\" string provided; build_plan v1 content field is likewise marked \"_truncated\":true. The summary text claims a single canonical contact block is used identically everywhere and that no separate contact detail is re-authored, but the full page-by-page content (Services, Leather Couches, Gallery, Contact Us bodies; remaining build tickets) was not available for this audit to confirm the claim holds across every page instance rather than just the Home section described in the preview."
+      },
+      {
+        "title": "New pages (Get a Quote, About, Fabrics & Collections, location subpages) introduced without explicit client-approval trace, risking scope creep beyond audited/approved content",
+        "severity": "P2",
+        "category": "Scope Integrity",
+        "evidence": "research_report only audited Home, Leather Couches, Gallery, Services, Contact Us. site_blueprint and build_plan add Get a Quote, About Imvusa, Fabrics & Collections, /contact/george, /contact/bloemfontein as new pages, and content_pack's own summary notes it deliberately excluded Get a Quote/About copy because 'the task scope named' only the original five pages. This is a reasonable editorial judgment but there is no visible record of human sign-off treating this page-count expansion as approved scope versus agent-originated scope creep, which should be explicitly confirmed at HUMAN DESIGN APPROVAL rather than assumed clean by QA."
+      },
+      {
+        "title": "George phone / Bloemfontein address remain genuinely unresolved facts blocking launch",
+        "severity": "P0",
+        "category": "Data Integrity / Launch Blocker",
+        "evidence": "build_plan explicitly creates AMBER tickets 'Fix George Phone Number Mismatch' and 'Fix Bloemfontein Address Mismatch' that are blocked pending human/client confirmation of the real-world correct values; content_pack's canonical contact block cannot yet contain verified data. This is correctly handled as a hold rather than a silent guess, but it means the site cannot be launched with valid contact info until a human explicitly confirms both facts — this must remain a recorded launch hold, not silently cleared by any later stage."
+      },
+      {
+        "title": "design_system's 'no real visual input' limitation is honestly disclosed but not yet gated by a concrete re-verification ticket in build_plan beyond the general AMBER flag",
+        "severity": "P2",
+        "category": "Design Fidelity",
+        "evidence": "design_system v1 contains an explicit DISCLOSURE that no browsing/image-analysis capability was available and every color/typography value is a PROPOSED hypothesis requiring human visual verification against real site photography before implementation. build_plan's Global Elementor Design System Setup ticket is marked AMBER and includes a doNotChange note referencing this, which is good, but there is no distinct, separately trackable 'Human Visual Verification of Palette/Type Against Real Photography' ticket/checkpoint called out as its own line item — it's folded into a general implementation ticket, increasing risk that verification could be treated as done once the ticket is merely 'approved' rather than genuinely visually checked against real assets."
+      },
+      {
+        "title": "Hertex/Hertext and duplicated-services fixes are ticketed but full page-level enforcement not fully visible due to truncation",
+        "severity": "P3",
+        "category": "Verification Gap",
+        "evidence": "content_pack summary states fabric supplier name is standardized to 'Hertex Fabrics' throughout and the duplicated services list is eliminated to a single listing; site_blueprint and build_plan corroborate this intent. However, since content_pack's full page content was truncated in this handoff, per-page confirmation (e.g., that Gallery captions and any footer/CTA mentions also use 'Hertex' rather than 'Hertext') could not be independently verified in this pass."
+      }
+    ],
+    "counts": {
+      "P0": 1,
+      "P1": 2,
+      "P2": 2,
+      "P3": 1
+    },
+    "readyForHumanReview": false
+  },
+  "attempts": [
+    {
+      "providerId": "claude",
+      "outcome": "succeeded",
+      "model": "claude-sonnet-5",
+      "errorCategory": null,
+      "validation": {
+        "ok": true,
+        "schema": "qa_report@1",
+        "issues": []
+      },
+      "usage": {
+        "inputTokens": 14416,
+        "outputTokens": 2463
+      },
+      "latencyMs": 27967,
+      "selectionReason": "+ preferred provider for this job + text capability + structured_output capability + review capability + available",
+      "startedAt": "2026-09-09T14:15:36.453Z",
+      "finishedAt": "2026-09-09T14:16:04.421Z"
+    }
+  ]
+}

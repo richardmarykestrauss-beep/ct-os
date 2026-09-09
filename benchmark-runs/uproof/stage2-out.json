@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "runLabel": "U-PROOF (known) - Stage 2/7 - Agent 02 UX & Conversion Architect",
+  "elapsedMs": 52899,
+  "providerId": "gemini",
+  "model": "gemini-3.6-flash",
+  "usage": {
+    "inputTokens": 3297,
+    "outputTokens": 1938
+  },
+  "finishReason": "complete",
+  "output": {
+    "summary": "This site blueprint defines the information architecture, customer journeys, and conversion logic for U-Proof. It directly addresses key catalog and navigation flaws identified during research—specifically ensuring all 5 product categories display correctly on /shop, repairing broken featured product pricing, replacing placeholder '#' links with functional application routes, and establishing a seamless checkout path with Fastway Couriers live shipping and Payflex/Paystack gateways.",
+    "sitemap": [
+      {
+        "title": "Home",
+        "path": "/",
+        "purpose": "Primary landing experience highlighting U-Proof's core waterproofing solutions, featured products with accurate pricing, key applications, and direct paths to the catalog.",
+        "children": []
+      },
+      {
+        "title": "Shop",
+        "path": "/shop",
+        "purpose": "Comprehensive ecommerce catalog displaying all 5 product categories and variation pricing with live filter and sort capabilities.",
+        "children": [
+          {
+            "title": "Liquid Rubber",
+            "path": "/product-category/liquid-rubber"
+          },
+          {
+            "title": "Fibre Filler",
+            "path": "/product-category/fibre-filler"
+          },
+          {
+            "title": "Wall & Roof Paint",
+            "path": "/product-category/wall-roof-paint"
+          },
+          {
+            "title": "Primers",
+            "path": "/product-category/primers"
+          },
+          {
+            "title": "Membrane",
+            "path": "/product-category/membrane"
+          }
+        ]
+      },
+      {
+        "title": "Waterproofing Solutions",
+        "path": "/waterproofing-solutions",
+        "purpose": "Solution-oriented hub explaining U-Proof systems for commercial, residential, and industrial waterproofing projects.",
+        "children": []
+      },
+      {
+        "title": "How It Works",
+        "path": "/how-it-works",
+        "purpose": "Step-by-step guidance on membrane-free and membrane-reinforced waterproofing application procedures.",
+        "children": []
+      },
+      {
+        "title": "Applications",
+        "path": "/applications",
+        "purpose": "Use-case portal detailing specific surface application requirements and product pairings.",
+        "children": [
+          {
+            "title": "Roof Waterproofing",
+            "path": "/applications#roof-waterproofing"
+          },
+          {
+            "title": "Wall Sealing",
+            "path": "/applications#wall-sealing"
+          },
+          {
+            "title": "Foundation & Basement Protection",
+            "path": "/applications#foundation-protection"
+          },
+          {
+            "title": "Joint & Crack Repair",
+            "path": "/applications#joint-crack-repair"
+          }
+        ]
+      },
+      {
+        "title": "Help & Advice",
+        "path": "/help-advice",
+        "purpose": "Resource hub providing surface preparation guides, application tutorials, and technical support FAQs.",
+        "children": [
+          {
+            "title": "Surface Preparation Guide",
+            "path": "/help-advice/surface-preparation-guide"
+          },
+          {
+            "title": "How to Apply Liquid Rubber",
+            "path": "/help-advice/how-to-apply-liquid-rubber"
+          },
+          {
+            "title": "Frequently Asked Questions",
+            "path": "/help-advice/faqs"
+          }
+        ]
+      },
+      {
+        "title": "About us",
+        "path": "/about-us",
+        "purpose": "Company background, manufacturing quality standards, and brand commitment to South African building protection.",
+        "children": []
+      },
+      {
+        "title": "Contact",
+        "path": "/contact",
+        "purpose": "Direct customer support channel featuring physical location, trade inquiry form, and verified phone contact details.",
+        "children": []
+      }
+    ],
+    "journeys": [
+      {
+        "name": "Direct Product Purchase (ECommerce Buyer)",
+        "steps": [
+          "User lands on Home or directly on /shop page.",
+          "User selects category (e.g., Liquid Rubber or Primers) or uses the full product grid.",
+          "User views accurate size/color variation pricing (e.g., Liquid Rubber 5L = R790, 20L = R1790) on Product Detail Page.",
+          "User selects container size and adds item to Cart.",
+          "User proceeds to Checkout, enters delivery postal code, and selects Fastway Couriers live rate.",
+          "User selects Paystack (Card) or Payflex (BNPL) payment method and completes order."
+        ],
+        "conversionGoal": "Completed online transaction via Fastway Couriers shipping and instant gateway payment."
+      },
+      {
+        "name": "Problem-Led Application Journey (Contractor / DIYer)",
+        "steps": [
+          "User lands on Home or Applications menu link seeking a solution for a leaking roof or cracked wall.",
+          "User clicks the specific application card (e.g., Roof Waterproofing) instead of encountering a '#' broken link.",
+          "User reads application instructions and recommended system (e.g., Bonding Liquid Primer + Fibre Filler + Liquid Rubber + Membrane).",
+          "User clicks direct product links with accurate pricing cards to add items into cart.",
+          "User completes checkout."
+        ],
+        "conversionGoal": "Multi-product bundle purchase tailored to a specific application need."
+      },
+      {
+        "name": "Technical Validation Journey (Architect / Specifier)",
+        "steps": [
+          "User navigates to 'Help & Advice' or 'How It Works' to verify surface prep and product specs.",
+          "User reads real application guides (replacing placeholder AI articles).",
+          "User moves to Contact page or calls verified primary phone line (+27 11 450 1234) for technical trade pricing.",
+          "User submits trade query form."
+        ],
+        "conversionGoal": "High-value trade lead generation or direct phone contact."
+      }
+    ],
+    "conversionLogic": [
+      "Shop Query Repair: Configure the /shop archive loop to query and display products across all 5 active categories (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) rather than restricting output to a single product.",
+      "Featured Product Pricing Correction: Enforce master retail pricing on homepage cards—explicitly correcting Fibre Filler 20L card to display R1590 (instead of R500) and populating missing prices on Bonding Liquid Primer cards (5L = R500, 20L = R1500).",
+      "Application CTA Routing: Map all homepage Application card 'Read more' buttons and CTAs to functional application routes or direct anchor sections on /applications, eliminating all placeholder '#' links.",
+      "Fulfillment Friction Reduction: Direct WooCommerce checkout to calculate real-time Fastway Couriers shipping rates based on item weight/dimensions and delivery destination, eliminating manual flat-rate confusion.",
+      "Payment Gateway Conversion Boost: Display accepted payment logos (Paystack credit/debit card and Payflex Buy-Now-Pay-Later) prominently in header/footer and checkout to eliminate EFT dependency and build trust.",
+      "Header Hygiene & Trust: Remove placeholder phone number (+27100000000) from header and topbar, displaying only the verified contact line (+27 11 450 1234).",
+      "Blog & Advice Section Integrity: Replace placeholder AI blog teasers and future-dated posts with legitimate guides (Surface Preparation Guide, How to Apply Liquid Rubber, FAQs) linked from 'Help & Advice'."
+    ],
+    "openQuestions": [
+      "Address Reconciliation: The live Contact page displays 'Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929', whereas WooCommerce store shipping origin is set to 'Unit 4, Gateway Industrial Park, Edenvale, Johannesburg'. Which physical address should be used as the store shipping origin for Fastway Couriers pickup, and should the Contact page list both or only one?",
+      "Order Notification Recipient: Should order-notification emails be routed to Martin's direct inbox (or an info@uproof.co.za address), and what is the verified outgoing SMTP sender email address for WooCommerce system notifications?",
+      "Fastway & Payment API Credentials: Have live production API keys and account numbers for Fastway Couriers, Paystack, and Payflex been provided by the client for installation by Agent 05?"
+    ]
+  },
+  "attempts": [
+    {
+      "providerId": "gemini",
+      "outcome": "succeeded",
+      "model": "gemini-3.6-flash",
+      "errorCategory": null,
+      "validation": {
+        "ok": true,
+        "schema": "site_blueprint@1",
+        "issues": []
+      },
+      "usage": {
+        "inputTokens": 3297,
+        "outputTokens": 1938
+      },
+      "latencyMs": 52899,
+      "selectionReason": "+ preferred provider for this job + text capability + structured_output capability + available",
+      "startedAt": "2026-09-09T12:41:56.868Z",
+      "finishedAt": "2026-09-09T12:42:49.767Z"
+    }
+  ]
+}

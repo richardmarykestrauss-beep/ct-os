@@ -1,0 +1,21 @@
+{
+  "runLabel": "CROSS-SITE - Orchestrator synthesis -> cross_site_agent_evaluation@1",
+  "agent": {
+    "code": "ORCH",
+    "shortCode": "ORCH",
+    "name": "Orchestrator",
+    "role": "Workflow coordination & human approval gates",
+    "responsibilities": ["Coordinates the complete workflow", "Routes work to specialist agents", "Enforces human approval gates"],
+    "requiredCapabilities": ["text", "structured_output", "long_context"],
+    "permissionLevel": "AMBER",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "orchestrate",
+  "instructions": "Compare the U-Proof KNOWN benchmark run (agent_benchmark_report@1 - agents had access to real prior Creative Touch project knowledge/audit history for U-Proof) against the Imvusa BLIND benchmark run (blind_benchmark_report@1 - agents had ONLY approved doctrine, no project-specific prior knowledge, genuinely new site). Score exactly these 7 dimensions, each with a uProofAssessment, imvusaAssessment, and verdict: independent_discovery_quality (how much real, non-obvious discovery happened without prior knowledge to lean on - Imvusa is the harder test of this since it had zero project history); generic_vs_site_specific (did findings actually reference real, specific site details - phone numbers, page names, duplicated content, price figures - versus generic boilerplate advice that could apply to any site); hallucinations (did any stage invent facts, pages, prices, competitors, or credentials not traceable to real evidence - be specific about any found in either run, or state none found); implementation_specificity (how concrete and actionable was build_plan in each run); visual_reasoning_quality (both runs disclosed no real vision input - assess how honestly and usefully that limitation was handled in each); seo_reasoning_quality (content_pack quality, honesty about the business model - ecommerce for U-Proof vs lead-gen for Imvusa); qa_challenge_quality (how substantively did Stage 6 QA actually challenge prior stages in each run - compare the real defects found). Then give an overall trustRecommendation (TRUST / TRUST_WITH_CONDITIONS / DO_NOT_TRUST_YET) for whether this CT-OS pipeline, run for real via Gemini-preferred/Claude-fallback (later Claude-only) providers, could be trusted on a third, unseen client site, with explicit conditions. Also note in overallFindings any real infrastructure/provider-reliability observations from running this benchmark: Gemini hit a real HTTP 429 daily quota exhaustion partway through and never recovered for the rest of the session; Claude (claude-sonnet-5) then carried the entire remainder of both pipelines; Claude's forced tool-use output was observed to occasionally emit malformed XML-style <parameter> tags inside string fields on the first attempt for two different jobs, resolved by an explicit anti-XML instruction and/or retry; Claude's default output-token cap (originally 4096, hardcoded in the adapter with no env override) was too small for larger schemas and had to be raised. IMPORTANT OUTPUT FORMAT NOTE: return each field as plain JSON values directly as the tool-call argument. Do not emit any XML-style <parameter name=...> tags anywhere in your output, including inside string or array values.",
+  "requiredOutputSchema": "cross_site_agent_evaluation@1",
+  "knowledgeFile": "..\\uproof\\knowledge.json",
+  "inputs": [
+    { "file": "..\\uproof\\stage7-out.json", "id": "art_bench_uproof_report", "type": "agent_benchmark_report", "title": "U-Proof KNOWN Benchmark Report" },
+    { "file": "..\\imvusa\\stage7-out.json", "id": "art_bench_imvusa_report", "type": "blind_benchmark_report", "title": "Imvusa BLIND Benchmark Report" }
+  ]
+}

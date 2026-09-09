@@ -71,7 +71,7 @@ export class ClaudeProvider implements AIProvider {
     this.baseUrl = (opts.baseUrl ?? "https://api.anthropic.com/v1").replace(/\/$/, "");
     this.fetchImpl = opts.fetch ?? ((globalThis as { fetch?: FetchLike }).fetch ?? null);
     this.timeoutMs = opts.timeoutMs ?? 120_000;
-    this.maxOutputTokens = opts.maxOutputTokens ?? 4096;
+    this.maxOutputTokens = opts.maxOutputTokens ?? 16000;
     this.capabilities = opts.capabilities ?? DEFAULT_CAPABILITIES.claude;
     this.disabledFlag = opts.disabled ?? false;
     this.health = new HealthTracker({ cooldownMs: opts.healthCooldownMs, clock: opts.healthClock });
@@ -175,7 +175,7 @@ function buildUserMessage(request: ProviderRequest, useTool: boolean): string {
   if (request.inputArtifacts.length) {
     parts.push(
       `INPUT ARTIFACTS:\n${request.inputArtifacts
-        .map((a) => `- ${a.type} v${a.version} "${a.title}"${a.summary ? `: ${a.summary}` : ""}${a.content !== undefined && a.content !== null ? `\n  content: ${JSON.stringify(a.content).slice(0, 6000)}` : ""}`)
+        .map((a) => `- ${a.type} v${a.version} "${a.title}"${a.summary ? `: ${a.summary}` : ""}${a.content !== undefined && a.content !== null ? `\n  content: ${JSON.stringify(a.content).slice(0, 40000)}` : ""}`)
         .join("\n")}`,
     );
   }

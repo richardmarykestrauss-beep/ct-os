@@ -1,0 +1,166 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 1/7 - Agent 01 Research & Discovery",
+  "agent": {
+    "code": "A01",
+    "shortCode": "01",
+    "name": "Research & Discovery",
+    "role": "Business, site and competitor intelligence",
+    "responsibilities": [
+      "Business analysis",
+      "Existing-site audit",
+      "Competitor intelligence"
+    ],
+    "requiredCapabilities": [
+      "text",
+      "structured_output",
+      "long_context"
+    ],
+    "permissionLevel": "GREEN"
+  },
+  "taskType": "research",
+  "instructions": "TASK: Produce a research_report@1 for U-Proof, a South African waterproofing/building-products ecommerce company. Creative Touch is rebuilding/auditing this site on WordPress + WooCommerce.\n\nTHIS IS THE \"KNOWN\" (non-blind) SIDE of a two-project agent benchmark (CTOS-004A Part Q). You are explicitly permitted to draw on the PROJECT FACTS knowledge provided below (Creative Touch's own real prior audit history and business context for this specific client) in addition to the fresh live-site evidence gathered just now. Where the fresh evidence and the prior known context agree, say so. Where they disagree or the prior context looks out of date, say so explicitly rather than silently trusting either one - this reconciliation is itself part of what this research pass should produce.\n\nFRESH REAL EVIDENCE (gathered today, 2026-09-09, from the site's actual current live URL - the registered domain uproof.co.za is not yet DNS-connected to this site):\n\n=== HOME PAGE ===\nU-PROOF HOMEPAGE - fetched live, 2026-09-09, from https://teal-sparrow-432062.hostingersite.com/ (this is the site's real current live URL; the registered domain uproof.co.za is NOT yet DNS-connected to it).\n\nHero headline: \"Waterproofing that actually stops leaks\"\nSubheading: \"Liquid rubber, primers and sealants engineered for South African roofs, walls and concrete - shop online and get it delivered nationwide.\"\nCTA buttons: \"Shop Waterproofing Products\" (links to /shop), \"See How It Works\" (links to /how-it-works)\n\nNavigation menu: Home, Shop, Waterproofing Solutions, How It Works, Applications, Help & Advice, About us, Contact. Account login and cart icon top right.\n\nPage sections in order:\n1. Value proposition: \"A small leak today is a big repair bill tomorrow\" plus six benefit statements (Stops Leaks for Good, Built for SA Conditions, Bends Doesn't Crack, Roller Brush or Spray, Sticks to Almost Anything, Low-Odour & Water-Based).\n2. Product categories: Liquid Rubber, Fibre Filler, Primers, Wall & Roof Paint.\n3. Applications: Roof Waterproofing, Metal Roof Protection, Concrete Waterproofing, Gutters & Flashings, Balconies & Terraces, Parapet Walls.\n4. Featured products (3 cards): \"Bonding Liquid Primer 20L\" (no price shown), \"Bonding Liquid Primer 5L\" (no price shown), \"Fibre Filler 20L\" showing R500,00 with an Add to cart button.\n5. Trust section: \"Protect Your Roof Before the Next Rain\".\n6. Support section: \"Trusted Waterproofing Support\" (product guidance, DIY-friendly, SA engineering, nationwide delivery).\n7. Blog/resource teaser (3 cards): \"Surface Preparation Guide\" (dated December 17, 2025), \"How to Apply Liquid Rubber\" (dated June 26, 2026), \"FAQs\" (dated June 26, 2026). Author credited as \"ctsa-admin\".\n8. Newsletter signup: \"Get Waterproofing Tips & Product Updates\".\n\nTrust badges: \"10-15 Year Protection\", \"Free Nationwide Delivery\", \"DIY & Contractor Approved\", payment icons (Visa, Maestro, Mastercard, PayPal).\n\nFooter: links grouped as Shop Products / Solutions (Roof, Metal Roof, Concrete, Gutters & Flashings, Balconies & Terraces) / Legal (Terms & Conditions, Privacy Policy, About us, Contact). Copyright \"(c) 2026 U-Proof | All Rights Reserved\".\n\nObserved technical oddities (directly observed, not assumed):\n- Blog teaser dates are in the future relative to a normal publish history (June 26, 2026) - looks like placeholder/test content, not a real published article history.\n- Two of three \"Featured Products\" cards (Bonding Liquid Primer 20L and 5L) show no price at all.\n- The \"Fibre Filler 20L\" featured-product card shows R500,00 - this does not match the real current retail price Creative Touch has on file for that SKU (R1590 for 20L per the client's supplied price list), so this card is very likely showing a stale/wrong price.\n- Several \"Read more\" links under the Applications section point to \"#\" (non-functional placeholder anchors).\n- Featured-product card links use fragment identifiers like \"#product-bonding-liquid-20l\" / \"#action-fibre-filler-20l\" rather than real product URLs.\n- Blog teaser author byline is \"ctsa-admin\", an internal-looking admin username, not a real author name.\n\n=== SHOP PAGE ===\nU-PROOF SHOP PAGE - fetched live, 2026-09-09, from https://teal-sparrow-432062.hostingersite.com/shop\n\nCategory tabs shown: Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane (5 tabs; a \"View all\" link is also present).\n\nOnly ONE product actually rendered on the page despite the 5 category tabs: \"Liquid Rubber\" - \"High-performance liquid rubber sealant in a 5-L bucket, ideal for roofs, decks and terraces.\" Price shown: R790. Size options shown: 5L, 20L. Product bucket photo shown.\n\nNo sorting/filtering controls visible. No pagination visible. Quantity selector shows \"1+\" without normal increment/decrement controls.\n\nExternal references: all image assets resolve to the site's own domain (teal-sparrow-432062.hostingersite.com). Payment logos are hosted on-site as SVGs. No third-party external domains found in the visible/fetched content on this page.\n\n=== CONTACT PAGE ===\nU-PROOF CONTACT PAGE - fetched live, 2026-09-09, from https://teal-sparrow-432062.hostingersite.com/contact\n\nBusiness address shown: \"Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929\"\nPhone numbers shown: primary \"+27 (0) 11 450 1234\"; a second number shown in the header reads \"+27100000000\", which reads as a placeholder/generic-format number rather than a real line.\nEmail shown: \"info@uproof.co.za\"\nBusiness hours shown: \"Monday-Thursday 07:30-16:30\", \"Friday 07:30-15:30\", closed Saturday-Sunday.\nContact form fields: Full Name (required), Email Address (required), Mobile Number, Project Type (required dropdown), Message (required).\nMap: a Google Maps embed pointing at the Vereeniging address above.\nNo social media links found on this page.\n\nNOTE - real discrepancy worth flagging, not resolving: Creative Touch's most recent prior audit (as of 2026-09-02) recorded the real, confirmed business address as \"Unit 4, Gateway Industrial Park, 12 Grader Road, Sebenza, Edenvale, Johannesburg, 1609\" and had corrected WooCommerce's shipping-origin store settings to match that Edenvale address. The address now live on this Contact page (Vereeniging, a different town entirely) does not match that prior confirmed address. This could mean the page content changed since 2026-09-02, or that the Contact page and the store's shipping-origin settings disagree with each other again. This is stated as an open discrepancy for human confirmation with the client, not asserted as fact either way.\n\n=== PRODUCT PAGE ATTEMPT ===\nU-PROOF PRODUCT PAGE ATTEMPT - fetched live, 2026-09-09, target https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber/, which redirected to canonical https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber-5l-premium-waterproof-sealant/\n\nRepeated fetches of this product URL returned only page <head> metadata (page title \"Liquid Rubber 5L - Premium Waterproof Sealant - U-Proof\", a tag indicating \"Elementor 4.2.4\" as the page builder, standard responsive viewport meta, and fonts.googleapis.com as the only external resource reference) with NO page body content returned by the fetch tool, across two separate attempts with different prompts.\n\nIMPORTANT CAVEAT for whoever reads this evidence: the fetch tool used here does not execute JavaScript. If this product page's real content is rendered by client-side JavaScript (as Creative Touch's prior technical notes on this site describe for WooCommerce product pages specifically, as of the last audit), a real visitor's browser could still render the full page correctly even though this fetch could not retrieve it. This finding should therefore be reported as \"product-detail-page content could not be confirmed via a non-JavaScript-executing fetch, and needs verification with a real rendered browser screenshot\" - NOT asserted as \"the product page is broken for real users,\" since that has not actually been demonstrated.\n\nSeparately worth noting: the page metadata's \"Elementor 4.2.4\" tag is inconsistent with Creative Touch's most recent prior technical audit (2026-09-02), which found this site's theme to be 10Web's own proprietary \"WVC\" builder engine, not Elementor. This may mean the site has since been migrated toward Elementor (which prior CT notes recommended as the eventual real fix), or it may mean different page/post types on this site use different builders. This is flagged as an open question, not resolved here.\n\nProduce a plain-language research_report@1: a client-readable summary; business context; what you found on the existing site (grounded in the fresh evidence above, explicitly cross-checked against the PROJECT FACTS knowledge where relevant); competitor insights (state plainly that no competitor research was performed in this research pass - do not invent competitors); risks; recommendations; and a sources list citing the actual URLs fetched above. Do not fabricate any finding not grounded in the evidence or knowledge given to you.",
+  "inputArtifacts": [],
+  "knowledge": [
+    {
+      "id": "kn_doctrine_pipeline",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Every build passes through the safety pipeline",
+      "content": "BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE. No stage may be skipped by an agent.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine SAFETY_PIPELINE"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_permissions",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "GREEN / AMBER / RED permission tiers",
+      "content": "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine PERMISSION_MODEL"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_launch",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Launch never auto-approves",
+      "content": "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "appr_up_launch"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_learning",
+      "scope": "DOCTRINE",
+      "category": "process",
+      "title": "Agents propose; humans approve knowledge",
+      "content": "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "CTOS-001 Part F"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_pricing",
+      "scope": "PROJECT",
+      "category": "content",
+      "title": "U-Proof real product pricing",
+      "content": "Real current retail pricing supplied by the client (Martin), VAT-inclusive ZAR, as recorded by Creative Touch and applied to the store's product data:\nLiquid Rubber: 5L=R790, 20L=R1790.\nFibre Filler: 5L=R790, 20L=R1590.\nWall & Roof Paint: 5L=R600, 20L=R1290.\nZinc Phosphate Primer: 5L=R700, 20L=R1500.\nBonding Liquid Primer: 5L=R500, 20L=R1500.\nPlaster Primer: 5L=R500, 20L=R1000.\nMembrane: 100mm x 50m=R199, 200mm x 50m=R299, 300mm x 50m=R399, 500mm x 50m=R499, 1m x 50m=R999.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client-supplied price list"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_audit_history",
+      "scope": "PROJECT",
+      "category": "qa",
+      "title": "U-Proof prior Creative Touch audit history (as of 2026-09-02)",
+      "content": "Creative Touch's own prior hands-on technical audit history for this project (most recent pass 2026-09-02), summarized - real findings from direct WordPress/WooCommerce/SSH access, not assumptions:\n- No shipping zones or shipping methods were configured in WooCommerce as of the last check: checkout could silently accept an order with no shipping step or cost (confirmed with a real test order, since deleted).\n- Only BACS (no bank details entered), Cheque and COD payment methods were enabled; Paystack and Payflex plugins were installed but never actually configured with real merchant credentials.\n- The site's compiled front-end build files (for Shop/Product/Cart/Checkout specifically) were found hardcoding references to a third-party 10Web trial domain (allowed-pony.10web.cloud) for logo/breadcrumb/footer/payment-icon assets, and this was confirmed to be live and customer-facing on those specific page types as of 2026-09-02 (a housekeeping pass on 2026-09-02 stripped this reference from the on-disk build files - not independently re-verified live since).\n- A fake/placeholder \"recent articles\" teaser section (FAQs, How to Apply Liquid Rubber, Surface Preparation Guide) was found on the homepage, all linking to non-existent pages, left over from an earlier AI-generated site clone - a human decision on whether to remove it or commission real articles was still pending as of the last audit.\n- Real broken links were found and fixed on the homepage (a \"Shop Now\" CTA pointing at a dead external domain, a \"Learn more\" CTA pointing at a 404 path).\n- A dummy/placeholder-looking phone number pattern (+27100000000 style) was noted alongside what was believed to be a real-format number, with confirmation from the client still pending.\n- WooCommerce's shipping-origin store address had been corrected to match what was, at the time, the Contact page's stated business address (Unit 4, Gateway Industrial Park, 12 Grader Road, Sebenza, Edenvale, Johannesburg, 1609).\n- Order-notification emails were found going to Creative Touch's own address rather than the client's business inbox, and the outgoing \"from\" address was a leftover third-party domain the client does not control - both flagged as needing a decision before launch, not yet resolved.\n- Security hardening was applied (security headers, stripped WordPress/plugin version-disclosure tags, removed publicly-downloadable backup files that had been left in the web root).\n- Real product variation structures (Size and Size x Color) were built and verified for Liquid Rubber, Fibre Filler, Wall & Roof Paint and Membrane, with real pricing applied.\n\nNone of the above should be assumed to still be accurate today without being checked against the fresh evidence gathered in this same research pass - several already appear to have changed (see the product-page builder and contact-address discrepancies noted in the fresh evidence).",
+      "status": "APPROVED",
+      "confidence": 0.9,
+      "evidence": [
+        "CT internal audit rounds 1-3, 2026-08-31 to 2026-09-02"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_business",
+      "scope": "PROJECT",
+      "category": "client",
+      "title": "U-Proof business context",
+      "content": "Business context on file with Creative Touch: the client (referred to internally as Martin) owns a South African waterproofing/building-products company, U-Proof. Creative Touch is rebuilding/completing the company's ecommerce website on WordPress + WooCommerce after a prior developer relationship broke down without a proper handover. The client has said he likes the existing design and wants it completed and improved, not redesigned from scratch. The client does not want manual/flat-rate shipping rules and prefers live courier rates (Fastway Couriers was the courier under consideration); Payflex (a South African buy-now-pay-later provider) was under evaluation as a payment option alongside a standard card gateway, specifically because the client does not want EFT/manual payment as the primary path.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client intake"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    }
+  ],
+  "requiredOutputSchema": "research_report@1"
+}

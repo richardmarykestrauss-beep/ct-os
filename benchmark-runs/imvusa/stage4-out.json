@@ -1,0 +1,150 @@
+{
+  "ok": true,
+  "runLabel": "IMVUSA (blind) - Stage 4/7 - Agent 04 SEO & Content Architect",
+  "elapsedMs": 54487,
+  "providerId": "claude",
+  "model": "claude-sonnet-5",
+  "usage": {
+    "inputTokens": 9108,
+    "outputTokens": 4955
+  },
+  "finishReason": "complete",
+  "output": {
+    "summary": "Content pack for Imvusa Furniture's core rebuild pages (Home, Services, Leather Couches, Gallery, Contact Us), built strictly from research_report v1 and site_blueprint v1 findings. Resolves the two directly-observed contact mismatches by defining one authoritative, canonical contact block (used identically on Home and Contact Us, and referenced rather than re-authored on other pages). Eliminates the duplicated Services list by presenting the 8 named services exactly once. Standardizes the fabric supplier's name as \"Hertex Fabrics\" throughout (correcting the \"Hertext\" variant). Replaces the image-only Leather Couches and Gallery pages with substantive editorial copy per the blueprint's content strategy for those pages, without inventing services, locations, certifications, or awards not present in source research. No pricing, shop, or cart copy is included, consistent with the lead-generation/consultation business model. All service and location pages carry a single consistent conversion path toward requesting a quote/consultation; no separate Get a Quote or About page copy is included in this pack since the task scope named Home, Services, Leather Couches, Gallery, and Contact Us specifically, plus any blueprint-added pages directly required to support those — canonical contact detail is centralized on Contact Us rather than duplicated.",
+    "seoArchitecture": [
+      "Primary nav and URL structure mirrors the blueprint sitemap: /, /services, /leather-couches, /gallery, /contact - kept flat and shallow for a local lead-gen business, avoiding unnecessary depth.",
+      "Home (/) targets brand + broad category intent ('custom furniture George Bloemfontein', 'reupholstery South Africa') and funnels internal links to /services and /contact.",
+      "Services (/services) targets service-list intent as a single authoritative hub page listing all 8 services once (Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, Ottomans) - resolves the duplicate-content issue found in research, which was actively harming this page's crawl/index clarity.",
+      "Leather Couches (/leather-couches) is elevated from a thin, image-only page to a substantive flagship service/editorial page targeting 'leather couch reupholstery/repair George Bloemfontein' intent, cross-linked from the Services hub's Leather Couches entry to avoid duplicate/competing pages for the same topic.",
+      "Gallery (/gallery) targets portfolio/proof-of-work intent ('furniture reupholstery examples', 'before and after') with captioned, categorized project entries instead of an unlabeled image wall, giving search engines real indexable text per project.",
+      "Contact Us (/contact) is the single source of truth for NAP (Name, Address, Phone) data for both George and Bloemfontein offices - this directly resolves the two data mismatches found in research (George phone, Bloemfontein address) and supports local SEO consistency, which search engines and directories weight heavily for multi-location businesses.",
+      "Fabric supplier name standardized to 'Hertex Fabrics' (correct spelling) across every page that mentions it, removing the 'Hertext' inconsistency identified in research, since inconsistent brand-name spelling can dilute topical relevance and looks unprofessional to both users and partners.",
+      "Meta titles/descriptions are written per-page and location-aware (mentioning both George and Bloemfontein where relevant) to support local search visibility for a two-location service business, without fabricating any additional locations.",
+      "Internal linking consistently funnels every page toward the single contact/enquiry action, matching the blueprint's 'one core conversion action' principle, rather than scattering multiple competing calls to action."
+    ],
+    "pages": [
+      {
+        "path": "/",
+        "title": "Custom Furniture, Reupholstery & Interior Services in George & Bloemfontein | Imvusa Furniture",
+        "metaDescription": "Imvusa Furniture creates and restores custom furniture, curtains, cushions and more from our George and Bloemfontein studios. Get in touch for a personal consultation.",
+        "h1": "Custom Furniture & Reupholstery, Made to Fit Your Home",
+        "sections": [
+          "Hero: Warm introduction to Imvusa Furniture as a custom furniture, repair, reupholstery and interior services business serving clients from studios in George and Bloemfontein. Short value proposition emphasizing craftsmanship and made-to-order work, with a single primary call to action inviting visitors to get in touch to discuss their project.",
+          "Our Services Overview: A concise summary of the full range of services offered - Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, and Ottomans - each with a one-to-two sentence description, linking through to the corresponding section of the Services page.",
+          "Why Choose Imvusa: A short section describing the business's hands-on, consultation-led approach to custom work across both locations, and its use of quality fabric partners including Hertex Fabrics.",
+          "Featured Work Teaser: A short lead-in section pointing visitors to the Gallery and Leather Couches pages to see completed projects, framed as proof of craftsmanship rather than a generic image carousel.",
+          "Two Locations, One Team: A brief section noting that Imvusa operates from both George and Bloemfontein, inviting visitors to reach out to whichever office is most convenient for them.",
+          "Canonical Contact Block: The single authoritative contact section for both George and Bloemfontein offices (one verified phone number, email, and address per location), presented identically to the block on the Contact Us page so there is only one source of truth for contact details site-wide.",
+          "Closing Call to Action: A final, clear invitation to contact Imvusa to discuss a custom furniture, reupholstery, or interior project."
+        ]
+      },
+      {
+        "path": "/services",
+        "title": "Our Services | Furniture Repairs, Reupholstery, Curtains & More | Imvusa Furniture",
+        "metaDescription": "Explore Imvusa Furniture's full range of services - furniture repairs, reupholstery, custom curtains, headboards, scatter cushions, leather couches, wallpaper and ottomans - across George and Bloemfontein.",
+        "h1": "Our Services",
+        "sections": [
+          "Intro: A short paragraph introducing Imvusa's service range as a single, consultation-based offering for clients in George and Bloemfontein, noting that every project is custom and quoted individually rather than sold at a fixed price.",
+          "Furniture Repairs: Description of general furniture repair work restoring damaged or worn pieces, presented once (this page previously contained this list duplicated in full; it now appears exactly one time as the single authoritative listing).",
+          "Reupholstery: Description of reupholstery services for couches, chairs and other upholstered furniture, refreshing existing pieces with new fabric or leather.",
+          "Custom Curtains: Description of made-to-measure curtain design and installation for homes.",
+          "Headboards: Description of custom-made headboards tailored to a client's bedroom and fabric choice.",
+          "Scatter Cushions: Description of custom scatter cushions made to complement a room's existing furnishings.",
+          "Leather Couches: Short description of leather couch repair, reupholstery and custom leather couch work, linking through to the dedicated Leather Couches page for full detail.",
+          "Wallpaper: Description of wallpaper supply and installation services for interior spaces.",
+          "Ottomans: Description of custom-made ottomans built to match a client's interior.",
+          "Our Fabric Partner: A short note that Imvusa works with Hertex Fabrics (correct spelling used consistently) for quality fabric selection as part of reupholstery and curtain projects.",
+          "Call to Action: A closing invitation to contact Imvusa about any of the services above, directing to the Contact Us page's canonical contact block rather than a separate pricing or checkout flow."
+        ]
+      },
+      {
+        "path": "/leather-couches",
+        "title": "Leather Couches | Custom Leather Couch Reupholstery & Repair | Imvusa Furniture",
+        "metaDescription": "Imvusa Furniture repairs, reupholsters and crafts custom leather couches for clients in George and Bloemfontein. See our approach and get in touch to discuss your leather couch project.",
+        "h1": "Leather Couches, Restored and Custom-Made",
+        "sections": [
+          "Intro: An expanded introduction (replacing the prior single-sentence page) explaining that leather couches are a core part of Imvusa's work, covering both restoration of existing leather couches and creation of new custom pieces, for clients in George and Bloemfontein.",
+          "Our Approach to Leather Couch Work: A description of how Imvusa approaches a leather couch project - starting with an in-person or consultation-based assessment of the piece or brief, followed by material and leather selection, then the repair, reupholstery or build process itself.",
+          "Repairs & Restoration: A section describing how Imvusa restores worn, torn or damaged leather couches, extending the life of an existing piece rather than requiring full replacement.",
+          "Custom Leather Couch Builds: A section describing Imvusa's work creating new, made-to-order leather couches for clients who want a piece built to their own specification.",
+          "Caring for Your Leather Couch: General guidance for clients on looking after a leather couch between services, to help protect the investment in the piece.",
+          "Why Work With Imvusa: A short trust-building section noting the business's studios in George and Bloemfontein and its consultation-led, made-to-order approach to leather furniture.",
+          "Gallery Cross-Link: A short section inviting visitors to view completed leather couch projects on the Gallery page for further examples of the work described above.",
+          "Call to Action: A clear closing invitation to get in touch to discuss a leather couch repair, reupholstery or custom build, linking to the canonical Contact Us details."
+        ]
+      },
+      {
+        "path": "/gallery",
+        "title": "Gallery | Completed Furniture, Reupholstery & Interior Projects | Imvusa Furniture",
+        "metaDescription": "Browse completed furniture repair, reupholstery, curtain, cushion and interior projects from Imvusa Furniture's George and Bloemfontein studios.",
+        "h1": "Our Work",
+        "sections": [
+          "Intro: An expanded introduction (replacing the prior heading-only page) explaining that this Gallery brings together completed projects across Imvusa's full range of services, from furniture repairs and reupholstery to curtains, cushions, wallpaper and ottomans, completed for clients in both George and Bloemfontein.",
+          "Reupholstery Projects: A short section framing the reupholstery examples shown in this category, describing the kind of transformation typically involved (worn upholstery refreshed with new fabric or leather).",
+          "Curtains & Soft Furnishings Projects: A short section framing curtain, headboard and scatter cushion examples together as the soft furnishings side of Imvusa's work.",
+          "Leather Couch Projects: A short section pointing to leather couch examples within the Gallery and cross-linking to the dedicated Leather Couches page for full detail on that service.",
+          "Wallpaper & Ottomans Projects: A short section framing wallpaper and ottoman examples as part of the broader interior services offering.",
+          "A Note on Our Projects: A short explanatory note that each project shown reflects custom, quoted work carried out for an individual client's brief, reinforcing the consultation-based business model rather than off-the-shelf products.",
+          "Call to Action: A closing invitation for visitors who like what they see to get in touch and describe their own project, linking to the Contact Us page."
+        ]
+      },
+      {
+        "path": "/contact",
+        "title": "Contact Us | Imvusa Furniture in George & Bloemfontein",
+        "metaDescription": "Get in touch with Imvusa Furniture's George or Bloemfontein studio to discuss a custom furniture, reupholstery or interior project. Find our verified phone, email and address details here.",
+        "h1": "Contact Imvusa Furniture",
+        "sections": [
+          "Intro: A short paragraph inviting visitors to reach out to whichever Imvusa studio - George or Bloemfontein - is most convenient for them, to discuss a project or arrange a consultation.",
+          "George Office - Canonical Contact Block: The single verified phone number, email address (katelyn@imvusa.net), and physical address for the George office. This is the authoritative record for George office contact details and is the same block reused on the Home page, resolving the previously found phone number mismatch by having exactly one editable source of truth.",
+          "Bloemfontein Office - Canonical Contact Block: The single verified phone number (082 824 9790), email address (theresa@imvusa.net), and physical address for the Bloemfontein office. This is the authoritative record for Bloemfontein office contact details and is the same block reused on the Home page, resolving the previously found address mismatch by having exactly one editable source of truth.",
+          "How to Reach Us: A short note encouraging visitors to contact the office nearest them by phone or email to discuss their project, with a general enquiry option for anyone unsure which office to contact.",
+          "What Happens Next: A brief, reassuring section explaining that after a visitor gets in touch, an Imvusa team member from the relevant office will follow up to discuss the project and next steps - written to set expectations without describing a formal multi-step quote form not confirmed in current source material."
+        ]
+      }
+    ],
+    "internalLinking": [
+      "Home links to Services (full service list), Leather Couches (as a featured/flagship service), Gallery (proof of completed work), and Contact Us (canonical contact block) - every homepage section funnels toward one of these four destinations.",
+      "Services page's Leather Couches entry links directly to the standalone /leather-couches page rather than duplicating leather couch content on the Services page itself, avoiding the duplicate-content problem found in research.",
+      "Services page links to Contact Us at its closing call to action, as the single consistent conversion path for all eight services rather than separate contact prompts per service.",
+      "Leather Couches page links to Gallery for visual proof of completed leather couch projects, and to Contact Us for enquiries - keeping a single, consistent conversion destination.",
+      "Gallery page's Leather Couch Projects section links back to the dedicated Leather Couches page for visitors who want service detail rather than just images.",
+      "Gallery page links to Contact Us at its closing call to action, matching the site-wide single-conversion-path pattern.",
+      "Contact Us page is linked from every other page in this pack (Home, Services, Leather Couches, Gallery) as the single, consistent place to find verified phone, email and address details for both George and Bloemfontein - no other page re-authors this information, directly resolving the contact mismatches found in research.",
+      "Home page's canonical contact block and the Contact Us page's contact block use identical wording and data for each office, establishing Contact Us as the editable source of truth that Home simply reuses."
+    ]
+  },
+  "attempts": [
+    {
+      "providerId": "gemini",
+      "outcome": "failed",
+      "model": null,
+      "error": "Gemini HTTP 429: {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota ex",
+      "errorCategory": "provider_unavailable",
+      "validation": null,
+      "usage": null,
+      "latencyMs": 1122,
+      "selectionReason": "+ preferred provider for this job + text capability + structured_output capability + long_context capability + available",
+      "startedAt": "2026-09-09T14:12:00.412Z",
+      "finishedAt": "2026-09-09T14:12:01.534Z"
+    },
+    {
+      "providerId": "claude",
+      "outcome": "succeeded",
+      "model": "claude-sonnet-5",
+      "errorCategory": null,
+      "validation": {
+        "ok": true,
+        "schema": "content_pack@1",
+        "issues": []
+      },
+      "usage": {
+        "inputTokens": 9108,
+        "outputTokens": 4955
+      },
+      "latencyMs": 53363,
+      "selectionReason": "+ fallback (position 2 in the policy sequence) + text capability + structured_output capability + long_context capability + available",
+      "startedAt": "2026-09-09T14:12:01.534Z",
+      "finishedAt": "2026-09-09T14:12:54.898Z"
+    }
+  ]
+}

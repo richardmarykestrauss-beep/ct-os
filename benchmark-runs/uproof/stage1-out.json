@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "runLabel": "U-PROOF (known) - Stage 1/7 - Agent 01 Research & Discovery",
+  "elapsedMs": 22696,
+  "providerId": "gemini",
+  "model": "gemini-3.6-flash",
+  "usage": {
+    "inputTokens": 4025,
+    "outputTokens": 1481
+  },
+  "finishReason": "complete",
+  "output": {
+    "summary": "This report provides a comprehensive research and audit review of the U-Proof WooCommerce website hosted on hostinger staging environment (teal-sparrow-432062.hostingersite.com), cross-referenced with Creative Touch's prior audit records from September 2026 and official client pricing sheets. While structural progress has been made—including price structure setup and security hardening—critical blockers remain regarding catalog visibility, contact address alignment, pricing inaccuracies on featured cards, incomplete shipping/payment gateways, and temporary DNS setup.",
+    "businessContext": [
+      "Client: Martin / U-Proof, a South African manufacturer and provider of specialized waterproofing, sealants, and building products.",
+      "Creative Touch mandate: Rebuild and audit the WooCommerce ecommerce site after a prior developer relationship ended without handover; improve the existing design without redesigning from scratch.",
+      "Target custom domain: uproof.co.za (currently not DNS-connected; live development sits on hostinger staging teal-sparrow-432062.hostingersite.com).",
+      "Pricing model: Specific client-supplied retail pricing including VAT for Liquid Rubber, Fibre Filler, Wall & Roof Paint, Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer, and Membranes.",
+      "Fulfillment & Payments: Client requires live courier integration (Fastway Couriers) over flat rates, and online payment options (Payflex BNPL and credit card gateways) to avoid reliance on manual EFT."
+    ],
+    "existingSiteFindings": [
+      "Domain & DNS: The primary custom domain uproof.co.za is not yet pointed via DNS; current live site operates under https://teal-sparrow-432062.hostingersite.com/.",
+      "Catalog display issues: The /shop page shows 5 category tabs, but only one single product ('Liquid Rubber' at R790) is rendered on the page.",
+      "Homepage pricing and featured products: Featured cards for Bonding Liquid Primer (5L & 20L) display no price, while Fibre Filler 20L displays R500,00—conflicting directly with the client's master retail price list of R1590,00.",
+      "Address discrepancy: The live Contact page specifies 'Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929', whereas Creative Touch's 2026-09-02 audit recorded and set WooCommerce shipping origin to 'Unit 4, Gateway Industrial Park, 12 Grader Road, Sebenza, Edenvale, Johannesburg, 1609'.",
+      "Contact information: Includes a valid-format primary phone (+27 11 450 1234) alongside a placeholder number (+27100000000) in the header.",
+      "Navigation and Links: Multiple homepage Application 'Read more' links and featured product actions use placeholder fragment anchors ('#').",
+      "Page Builder & Technical Stack: Product metadata reveals 'Elementor 4.2.4', whereas prior audit recorded 10Web WVC builder engine; non-JS fetches returned empty body tags for product detail URLs, requiring headless/browser DOM verification.",
+      "Blog & Teasers: Homepage features placeholder articles with future publication dates (June 26, 2026) and admin author handle 'ctsa-admin'."
+    ],
+    "competitorInsights": [
+      "No competitor research was performed in this research pass."
+    ],
+    "risks": [
+      "Customer confusion and checkout errors resulting from conflicting business address details between the Contact page (Vereeniging) and WooCommerce store settings (Edenvale).",
+      "Financial loss or sales loss from display of incorrect pricing (e.g., Fibre Filler 20L listed at R500 instead of R1590) or unpriced product cards.",
+      "Reduced online conversions due to incomplete catalog rendering on the main Shop page where only 1 product displays out of 5 categories.",
+      "Potential trust erosion caused by placeholder telephone numbers (+27100000000), future-dated blog posts, and non-functional '#' links.",
+      "Checkout failures if payment gateways (Paystack/Payflex) and live shipping methods (Fastway) are not configured with active live credentials prior to domain cutover."
+    ],
+    "recommendations": [
+      "Reconcile physical business address with client (Vereeniging vs. Edenvale) and align both WooCommerce shipping origin settings and Contact page content.",
+      "Correct catalog query/display settings in WooCommerce so that all product categories, variations, and correct prices (matching the master price list) display on /shop and homepage.",
+      "Update featured product cards to link to real product URLs and display validated pricing (fix Fibre Filler 20L to R1590).",
+      "Remove placeholder phone number (+27100000000) and replace or hide placeholder blog posts/authors prior to launch.",
+      "Complete live credentialing and API configuration for Paystack, Payflex, and Fastway Couriers shipping integration.",
+      "Perform full rendered browser/visual testing on WooCommerce product detail pages to verify Elementor template rendering.",
+      "Execute official DNS migration connecting uproof.co.za once staging audit and human QA sign-off are completed."
+    ],
+    "sources": [
+      {
+        "ref": "https://teal-sparrow-432062.hostingersite.com/",
+        "note": "Live home page scan (fetched 2026-09-09)"
+      },
+      {
+        "ref": "https://teal-sparrow-432062.hostingersite.com/shop",
+        "note": "Live shop page scan (fetched 2026-09-09)"
+      },
+      {
+        "ref": "https://teal-sparrow-432062.hostingersite.com/contact",
+        "note": "Live contact page scan (fetched 2026-09-09)"
+      },
+      {
+        "ref": "https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber-5l-premium-waterproof-sealant/",
+        "note": "Live product page fetch attempt (fetched 2026-09-09)"
+      },
+      {
+        "ref": "PROJECT_FACTS_2026_09_02_AUDIT",
+        "note": "Creative Touch prior technical audit records and client pricing schedule"
+      }
+    ]
+  },
+  "attempts": [
+    {
+      "providerId": "gemini",
+      "outcome": "succeeded",
+      "model": "gemini-3.6-flash",
+      "errorCategory": null,
+      "validation": {
+        "ok": true,
+        "schema": "research_report@1",
+        "issues": []
+      },
+      "usage": {
+        "inputTokens": 4025,
+        "outputTokens": 1481
+      },
+      "latencyMs": 22695,
+      "selectionReason": "+ preferred provider for this job + text capability + structured_output capability + long_context capability + available",
+      "startedAt": "2026-09-09T12:37:50.868Z",
+      "finishedAt": "2026-09-09T12:38:13.564Z"
+    }
+  ]
+}

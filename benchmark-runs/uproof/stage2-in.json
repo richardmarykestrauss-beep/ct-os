@@ -1,0 +1,158 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 2/7 - Agent 02 UX & Conversion Architect",
+  "agent": {
+    "code": "A02",
+    "shortCode": "02",
+    "name": "UX & Conversion Architect",
+    "role": "Sitemap, customer journey, IA, conversion logic",
+    "responsibilities": [
+      "Sitemap",
+      "Customer journey",
+      "Information architecture",
+      "Conversion logic"
+    ],
+    "requiredCapabilities": [
+      "text",
+      "structured_output"
+    ],
+    "permissionLevel": "GREEN",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "ux_architecture",
+  "instructions": "TASK: Produce a site_blueprint@1 for U-Proof (South African waterproofing/building-products ecommerce company), based on the attached research_report input artifact from Agent 01.\n\nTHIS IS THE \"KNOWN\" (non-blind) SIDE of a two-project agent benchmark (CTOS-004A Part Q). Ground every part of your sitemap and conversion logic in the research findings you were given (the input artifact) and the PROJECT FACTS knowledge - do not invent site sections or products that were not mentioned there.\n\nSpecifically address, in your sitemap/conversion logic, how the site's information architecture should handle the real problems the research surfaced: the Shop page currently renders only 1 of 5 product categories, two featured-product cards have no price and one shows a wrong price, several CTAs use placeholder \"#\" links, and there is an unresolved business-address discrepancy between the Contact page and the store's shipping-origin settings. Your job is IA/journey/conversion-logic design, not to fix the WordPress content yourself - state clearly what the sitemap/journey requires so a builder (Agent 05) can act on it.\n\nProduce a site_blueprint@1: summary; sitemap (top-level pages plus children, matching the real navigation menu found in research: Home, Shop, Waterproofing Solutions, How It Works, Applications, Help & Advice, About us, Contact - and the 5 real product categories: Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane); customer journeys with a clear conversionGoal for each; conversion logic; and open questions (carry forward the unresolved discrepancies from research as open questions where appropriate, e.g. the business address).",
+  "inputArtifacts": [
+    {
+      "id": "art_bench_up_research",
+      "type": "research_report",
+      "version": 1,
+      "title": "U-Proof Research & Discovery Report (benchmark)",
+      "summary": "This report provides a comprehensive research and audit review of the U-Proof WooCommerce website hosted on hostinger staging environment (teal-sparrow-432062.hostingersite.com), cross-referenced with Creative Touch's prior audit records from September 2026 and official client pricing sheets. While structural progress has been made-including price structure setup and security hardening-critical blockers remain regarding catalog visibility, contact address alignment, pricing inaccuracies on featured cards, incomplete shipping/payment gateways, and temporary DNS setup.",
+      "content": {
+        "summary": "This report provides a comprehensive research and audit review of the U-Proof WooCommerce website hosted on hostinger staging environment (teal-sparrow-432062.hostingersite.com), cross-referenced with Creative Touch's prior audit records from September 2026 and official client pricing sheets. While structural progress has been made-including price structure setup and security hardening-critical blockers remain regarding catalog visibility, contact address alignment, pricing inaccuracies on featured cards, incomplete shipping/payment gateways, and temporary DNS setup.",
+        "businessContext": [
+          "Client: Martin / U-Proof, a South African manufacturer and provider of specialized waterproofing, sealants, and building products.",
+          "Creative Touch mandate: Rebuild and audit the WooCommerce ecommerce site after a prior developer relationship ended without handover; improve the existing design without redesigning from scratch.",
+          "Target custom domain: uproof.co.za (currently not DNS-connected; live development sits on hostinger staging teal-sparrow-432062.hostingersite.com).",
+          "Pricing model: Specific client-supplied retail pricing including VAT for Liquid Rubber, Fibre Filler, Wall & Roof Paint, Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer, and Membranes.",
+          "Fulfillment & Payments: Client requires live courier integration (Fastway Couriers) over flat rates, and online payment options (Payflex BNPL and credit card gateways) to avoid reliance on manual EFT."
+        ],
+        "existingSiteFindings": [
+          "Domain & DNS: The primary custom domain uproof.co.za is not yet pointed via DNS; current live site operates under https://teal-sparrow-432062.hostingersite.com/.",
+          "Catalog display issues: The /shop page shows 5 category tabs, but only one single product ('Liquid Rubber' at R790) is rendered on the page.",
+          "Homepage pricing and featured products: Featured cards for Bonding Liquid Primer (5L & 20L) display no price, while Fibre Filler 20L displays R500,00-conflicting directly with the client's master retail price list of R1590,00.",
+          "Address discrepancy: The live Contact page specifies 'Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929', whereas Creative Touch's 2026-09-02 audit recorded and set WooCommerce shipping origin to 'Unit 4, Gateway Industrial Park, 12 Grader Road, Sebenza, Edenvale, Johannesburg, 1609'.",
+          "Contact information: Includes a valid-format primary phone (+27 11 450 1234) alongside a placeholder number (+27100000000) in the header.",
+          "Navigation and Links: Multiple homepage Application 'Read more' links and featured product actions use placeholder fragment anchors ('#').",
+          "Page Builder & Technical Stack: Product metadata reveals 'Elementor 4.2.4', whereas prior audit recorded 10Web WVC builder engine; non-JS fetches returned empty body tags for product detail URLs, requiring headless/browser DOM verification.",
+          "Blog & Teasers: Homepage features placeholder articles with future publication dates (June 26, 2026) and admin author handle 'ctsa-admin'."
+        ],
+        "competitorInsights": [
+          "No competitor research was performed in this research pass."
+        ],
+        "risks": [
+          "Customer confusion and checkout errors resulting from conflicting business address details between the Contact page (Vereeniging) and WooCommerce store settings (Edenvale).",
+          "Financial loss or sales loss from display of incorrect pricing (e.g., Fibre Filler 20L listed at R500 instead of R1590) or unpriced product cards.",
+          "Reduced online conversions due to incomplete catalog rendering on the main Shop page where only 1 product displays out of 5 categories.",
+          "Potential trust erosion caused by placeholder telephone numbers (+27100000000), future-dated blog posts, and non-functional '#' links.",
+          "Checkout failures if payment gateways (Paystack/Payflex) and live shipping methods (Fastway) are not configured with active live credentials prior to domain cutover."
+        ],
+        "recommendations": [
+          "Reconcile physical business address with client (Vereeniging vs. Edenvale) and align both WooCommerce shipping origin settings and Contact page content.",
+          "Correct catalog query/display settings in WooCommerce so that all product categories, variations, and correct prices (matching the master price list) display on /shop and homepage.",
+          "Update featured product cards to link to real product URLs and display validated pricing (fix Fibre Filler 20L to R1590).",
+          "Remove placeholder phone number (+27100000000) and replace or hide placeholder blog posts/authors prior to launch.",
+          "Complete live credentialing and API configuration for Paystack, Payflex, and Fastway Couriers shipping integration.",
+          "Perform full rendered browser/visual testing on WooCommerce product detail pages to verify Elementor template rendering.",
+          "Execute official DNS migration connecting uproof.co.za once staging audit and human QA sign-off are completed."
+        ],
+        "sources": [
+          { "ref": "https://teal-sparrow-432062.hostingersite.com/", "note": "Live home page scan (fetched 2026-09-09)" },
+          { "ref": "https://teal-sparrow-432062.hostingersite.com/shop", "note": "Live shop page scan (fetched 2026-09-09)" },
+          { "ref": "https://teal-sparrow-432062.hostingersite.com/contact", "note": "Live contact page scan (fetched 2026-09-09)" },
+          { "ref": "https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber-5l-premium-waterproof-sealant/", "note": "Live product page fetch attempt (fetched 2026-09-09)" },
+          { "ref": "PROJECT_FACTS_2026_09_02_AUDIT", "note": "Creative Touch prior technical audit records and client pricing schedule" }
+        ]
+      }
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "kn_doctrine_pipeline",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Every build passes through the safety pipeline",
+      "content": "BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE. No stage may be skipped by an agent.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["state-machine SAFETY_PIPELINE"],
+      "projectId": null, "jobId": null, "proposedByAgentId": null, "reviewedBy": "Production Lead", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_permissions",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "GREEN / AMBER / RED permission tiers",
+      "content": "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["state-machine PERMISSION_MODEL"],
+      "projectId": null, "jobId": null, "proposedByAgentId": null, "reviewedBy": "Production Lead", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_launch",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Launch never auto-approves",
+      "content": "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["appr_up_launch"],
+      "projectId": null, "jobId": null, "proposedByAgentId": null, "reviewedBy": "Production Lead", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_learning",
+      "scope": "DOCTRINE",
+      "category": "process",
+      "title": "Agents propose; humans approve knowledge",
+      "content": "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["CTOS-001 Part F"],
+      "projectId": null, "jobId": null, "proposedByAgentId": null, "reviewedBy": "Production Lead", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_up_pricing",
+      "scope": "PROJECT",
+      "category": "content",
+      "title": "U-Proof real product pricing",
+      "content": "Real current retail pricing supplied by the client (Martin), VAT-inclusive ZAR, as recorded by Creative Touch and applied to the store's product data:\nLiquid Rubber: 5L=R790, 20L=R1790.\nFibre Filler: 5L=R790, 20L=R1590.\nWall & Roof Paint: 5L=R600, 20L=R1290.\nZinc Phosphate Primer: 5L=R700, 20L=R1500.\nBonding Liquid Primer: 5L=R500, 20L=R1500.\nPlaster Primer: 5L=R500, 20L=R1000.\nMembrane: 100mm x 50m=R199, 200mm x 50m=R299, 300mm x 50m=R399, 500mm x 50m=R499, 1m x 50m=R999.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["client-supplied price list"],
+      "projectId": "proj_uproof", "jobId": null, "proposedByAgentId": null, "reviewedBy": "Richard", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_up_audit_history",
+      "scope": "PROJECT",
+      "category": "qa",
+      "title": "U-Proof prior Creative Touch audit history (as of 2026-09-02)",
+      "content": "Creative Touch's own prior hands-on technical audit history for this project (most recent pass 2026-09-02): no shipping zones/methods configured (test order confirmed silent no-shipping checkout, since deleted); only BACS/Cheque/COD enabled, Paystack/Payflex installed but never configured with real credentials; compiled Shop/Product/Cart/Checkout build files were found hardcoding a third-party 10Web trial domain (allowed-pony.10web.cloud) for logo/breadcrumb/footer/payment-icon assets, confirmed live and customer-facing as of 2026-09-02, then stripped from on-disk build files in a housekeeping pass (not independently re-verified live since); a fake 'recent articles' teaser section (FAQs, How to Apply Liquid Rubber, Surface Preparation Guide) on the homepage links to non-existent pages, left from an earlier AI-generated clone; real broken homepage CTA links were found and fixed; a placeholder-style phone number pattern (+27100000000) was noted; WooCommerce shipping-origin address was corrected to match the Contact page's address at the time (Unit 4, Gateway Industrial Park, Sebenza, Edenvale, Johannesburg); order-notification emails were going to Creative Touch's own address rather than the client's business inbox, and the outgoing from-address was a leftover third-party domain - both flagged, not resolved; security hardening was applied (headers, stripped version-disclosure tags, removed exposed backup files); real Size and Size x Color variation structures were built and verified for Liquid Rubber, Fibre Filler, Wall & Roof Paint and Membrane with real pricing. None of this should be assumed still accurate without checking fresh evidence - several items already appear to have changed.",
+      "status": "APPROVED",
+      "confidence": 0.9,
+      "evidence": ["CT internal audit rounds 1-3, 2026-08-31 to 2026-09-02"],
+      "projectId": "proj_uproof", "jobId": null, "proposedByAgentId": null, "reviewedBy": "Richard", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "kn_up_business",
+      "scope": "PROJECT",
+      "category": "client",
+      "title": "U-Proof business context",
+      "content": "The client (Martin) owns a South African waterproofing/building-products company, U-Proof. Creative Touch is rebuilding/completing the company's ecommerce website on WordPress + WooCommerce after a prior developer relationship broke down without a proper handover. The client likes the existing design and wants it completed and improved, not redesigned. The client does not want manual/flat-rate shipping and prefers live courier rates (Fastway Couriers); Payflex (SA buy-now-pay-later) was under evaluation alongside a standard card gateway, because the client does not want EFT/manual payment as the primary path.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": ["client intake"],
+      "projectId": "proj_uproof", "jobId": null, "proposedByAgentId": null, "reviewedBy": "Richard", "reviewedById": null, "reviewedAt": null, "createdAt": null, "updatedAt": null
+    }
+  ],
+  "requiredOutputSchema": "site_blueprint@1"
+}

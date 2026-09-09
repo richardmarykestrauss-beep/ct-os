@@ -1,0 +1,910 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 6/7 - Agent 06 QA & Launch Auditor",
+  "agent": {
+    "code": "A06",
+    "shortCode": "06",
+    "name": "QA & Launch Auditor",
+    "role": "Independent testing, regression audit, launch readiness",
+    "responsibilities": [
+      "Whole-site QA",
+      "Regression audit",
+      "Launch readiness"
+    ],
+    "requiredCapabilities": [
+      "text",
+      "structured_output",
+      "review"
+    ],
+    "permissionLevel": "GREEN",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "qa_audit",
+  "instructions": "You are Agent 06, QA & Launch Auditor for U-Proof. You are INDEPENDENT of Agents 01-05 and must actively challenge their prior work, not rubber-stamp it. You have no browsing or vision tool access in this run - review only the structured artifacts supplied (research findings, site blueprint, design system, content pack, build plan). For each of the four prior artifacts: identify anything that looks unverified, internally inconsistent, overconfident, or that silently assumes something was fixed when it was only planned. Specifically check: (1) does content_pack's shop-catalog claim overstate what was actually confirmed live vs. only fixed-in-plan; (2) does build_plan's ticket list actually cover every issue research_report raised, or are any dropped; (3) did design_system's 'no real vision input' limitation get carried forward honestly into what build_plan assumes about visual fidelity; (4) are there any invented facts (pages, prices, credentials, dates) not traceable back to the real evidence in PROJECT knowledge. Produce a qa_report@1: list concrete defects with severity (P0=blocks launch, P1=must-fix before launch, P2=should-fix, P3=minor/cosmetic), and set readyForHumanReview honestly based on what you actually found - do not default to true. This is a review of PLANNING ARTIFACTS ONLY; no live site was tested in this pass, so do not report defects as if they were freshly re-tested against the live site - only flag what the artifacts themselves fail to address or handle inconsistently.",
+  "inputArtifacts": [
+    {
+      "id": "art_bench_up_research",
+      "type": "research_report",
+      "version": 1,
+      "title": "U-Proof Research Report (Stage 1 output)",
+      "summary": "This report provides a comprehensive research and audit review of the U-Proof WooCommerce website hosted on hostinger staging environment (teal-sparrow-432062.hostingersite.com), cross-referenced with Creative Touch's prior audit records from September 2026 and official client pricing sheets. While structural progress has been made—including price structure setup and security hardening—critical blockers remain regarding catalog visibility, contact address alignment, pricing inaccuracies on featured cards, incomplete shipping/payment gateways, and temporary DNS setup.",
+      "content": {
+        "summary": "This report provides a comprehensive research and audit review of the U-Proof WooCommerce website hosted on hostinger staging environment (teal-sparrow-432062.hostingersite.com), cross-referenced with Creative Touch's prior audit records from September 2026 and official client pricing sheets. While structural progress has been made—including price structure setup and security hardening—critical blockers remain regarding catalog visibility, contact address alignment, pricing inaccuracies on featured cards, incomplete shipping/payment gateways, and temporary DNS setup.",
+        "businessContext": [
+          "Client: Martin / U-Proof, a South African manufacturer and provider of specialized waterproofing, sealants, and building products.",
+          "Creative Touch mandate: Rebuild and audit the WooCommerce ecommerce site after a prior developer relationship ended without handover; improve the existing design without redesigning from scratch.",
+          "Target custom domain: uproof.co.za (currently not DNS-connected; live development sits on hostinger staging teal-sparrow-432062.hostingersite.com).",
+          "Pricing model: Specific client-supplied retail pricing including VAT for Liquid Rubber, Fibre Filler, Wall & Roof Paint, Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer, and Membranes.",
+          "Fulfillment & Payments: Client requires live courier integration (Fastway Couriers) over flat rates, and online payment options (Payflex BNPL and credit card gateways) to avoid reliance on manual EFT."
+        ],
+        "existingSiteFindings": [
+          "Domain & DNS: The primary custom domain uproof.co.za is not yet pointed via DNS; current live site operates under https://teal-sparrow-432062.hostingersite.com/.",
+          "Catalog display issues: The /shop page shows 5 category tabs, but only one single product ('Liquid Rubber' at R790) is rendered on the page.",
+          "Homepage pricing and featured products: Featured cards for Bonding Liquid Primer (5L & 20L) display no price, while Fibre Filler 20L displays R500,00—conflicting directly with the client's master retail price list of R1590,00.",
+          "Address discrepancy: The live Contact page specifies 'Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929', whereas Creative Touch's 2026-09-02 audit recorded and set WooCommerce shipping origin to 'Unit 4, Gateway Industrial Park, 12 Grader Road, Sebenza, Edenvale, Johannesburg, 1609'.",
+          "Contact information: Includes a valid-format primary phone (+27 11 450 1234) alongside a placeholder number (+27100000000) in the header.",
+          "Navigation and Links: Multiple homepage Application 'Read more' links and featured product actions use placeholder fragment anchors ('#').",
+          "Page Builder & Technical Stack: Product metadata reveals 'Elementor 4.2.4', whereas prior audit recorded 10Web WVC builder engine; non-JS fetches returned empty body tags for product detail URLs, requiring headless/browser DOM verification.",
+          "Blog & Teasers: Homepage features placeholder articles with future publication dates (June 26, 2026) and admin author handle 'ctsa-admin'."
+        ],
+        "competitorInsights": [
+          "No competitor research was performed in this research pass."
+        ],
+        "risks": [
+          "Customer confusion and checkout errors resulting from conflicting business address details between the Contact page (Vereeniging) and WooCommerce store settings (Edenvale).",
+          "Financial loss or sales loss from display of incorrect pricing (e.g., Fibre Filler 20L listed at R500 instead of R1590) or unpriced product cards.",
+          "Reduced online conversions due to incomplete catalog rendering on the main Shop page where only 1 product displays out of 5 categories.",
+          "Potential trust erosion caused by placeholder telephone numbers (+27100000000), future-dated blog posts, and non-functional '#' links.",
+          "Checkout failures if payment gateways (Paystack/Payflex) and live shipping methods (Fastway) are not configured with active live credentials prior to domain cutover."
+        ],
+        "recommendations": [
+          "Reconcile physical business address with client (Vereeniging vs. Edenvale) and align both WooCommerce shipping origin settings and Contact page content.",
+          "Correct catalog query/display settings in WooCommerce so that all product categories, variations, and correct prices (matching the master price list) display on /shop and homepage.",
+          "Update featured product cards to link to real product URLs and display validated pricing (fix Fibre Filler 20L to R1590).",
+          "Remove placeholder phone number (+27100000000) and replace or hide placeholder blog posts/authors prior to launch.",
+          "Complete live credentialing and API configuration for Paystack, Payflex, and Fastway Couriers shipping integration.",
+          "Perform full rendered browser/visual testing on WooCommerce product detail pages to verify Elementor template rendering.",
+          "Execute official DNS migration connecting uproof.co.za once staging audit and human QA sign-off are completed."
+        ],
+        "sources": [
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/",
+            "note": "Live home page scan (fetched 2026-09-09)"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/shop",
+            "note": "Live shop page scan (fetched 2026-09-09)"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/contact",
+            "note": "Live contact page scan (fetched 2026-09-09)"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber-5l-premium-waterproof-sealant/",
+            "note": "Live product page fetch attempt (fetched 2026-09-09)"
+          },
+          {
+            "ref": "PROJECT_FACTS_2026_09_02_AUDIT",
+            "note": "Creative Touch prior technical audit records and client pricing schedule"
+          }
+        ]
+      }
+    },
+    {
+      "id": "art_bench_up_blueprint",
+      "type": "site_blueprint",
+      "version": 1,
+      "title": "U-Proof Site Blueprint (Stage 2 output)",
+      "summary": "This site blueprint defines the information architecture, customer journeys, and conversion logic for U-Proof. It directly addresses key catalog and navigation flaws identified during research—specifically ensuring all 5 product categories display correctly on /shop, repairing broken featured product pricing, replacing placeholder '#' links with functional application routes, and establishing a seamless checkout path with Fastway Couriers live shipping and Payflex/Paystack gateways.",
+      "content": {
+        "summary": "This site blueprint defines the information architecture, customer journeys, and conversion logic for U-Proof. It directly addresses key catalog and navigation flaws identified during research—specifically ensuring all 5 product categories display correctly on /shop, repairing broken featured product pricing, replacing placeholder '#' links with functional application routes, and establishing a seamless checkout path with Fastway Couriers live shipping and Payflex/Paystack gateways.",
+        "sitemap": [
+          {
+            "title": "Home",
+            "path": "/",
+            "purpose": "Primary landing experience highlighting U-Proof's core waterproofing solutions, featured products with accurate pricing, key applications, and direct paths to the catalog.",
+            "children": []
+          },
+          {
+            "title": "Shop",
+            "path": "/shop",
+            "purpose": "Comprehensive ecommerce catalog displaying all 5 product categories and variation pricing with live filter and sort capabilities.",
+            "children": [
+              {
+                "title": "Liquid Rubber",
+                "path": "/product-category/liquid-rubber"
+              },
+              {
+                "title": "Fibre Filler",
+                "path": "/product-category/fibre-filler"
+              },
+              {
+                "title": "Wall & Roof Paint",
+                "path": "/product-category/wall-roof-paint"
+              },
+              {
+                "title": "Primers",
+                "path": "/product-category/primers"
+              },
+              {
+                "title": "Membrane",
+                "path": "/product-category/membrane"
+              }
+            ]
+          },
+          {
+            "title": "Waterproofing Solutions",
+            "path": "/waterproofing-solutions",
+            "purpose": "Solution-oriented hub explaining U-Proof systems for commercial, residential, and industrial waterproofing projects.",
+            "children": []
+          },
+          {
+            "title": "How It Works",
+            "path": "/how-it-works",
+            "purpose": "Step-by-step guidance on membrane-free and membrane-reinforced waterproofing application procedures.",
+            "children": []
+          },
+          {
+            "title": "Applications",
+            "path": "/applications",
+            "purpose": "Use-case portal detailing specific surface application requirements and product pairings.",
+            "children": [
+              {
+                "title": "Roof Waterproofing",
+                "path": "/applications#roof-waterproofing"
+              },
+              {
+                "title": "Wall Sealing",
+                "path": "/applications#wall-sealing"
+              },
+              {
+                "title": "Foundation & Basement Protection",
+                "path": "/applications#foundation-protection"
+              },
+              {
+                "title": "Joint & Crack Repair",
+                "path": "/applications#joint-crack-repair"
+              }
+            ]
+          },
+          {
+            "title": "Help & Advice",
+            "path": "/help-advice",
+            "purpose": "Resource hub providing surface preparation guides, application tutorials, and technical support FAQs.",
+            "children": [
+              {
+                "title": "Surface Preparation Guide",
+                "path": "/help-advice/surface-preparation-guide"
+              },
+              {
+                "title": "How to Apply Liquid Rubber",
+                "path": "/help-advice/how-to-apply-liquid-rubber"
+              },
+              {
+                "title": "Frequently Asked Questions",
+                "path": "/help-advice/faqs"
+              }
+            ]
+          },
+          {
+            "title": "About us",
+            "path": "/about-us",
+            "purpose": "Company background, manufacturing quality standards, and brand commitment to South African building protection.",
+            "children": []
+          },
+          {
+            "title": "Contact",
+            "path": "/contact",
+            "purpose": "Direct customer support channel featuring physical location, trade inquiry form, and verified phone contact details.",
+            "children": []
+          }
+        ],
+        "journeys": [
+          {
+            "name": "Direct Product Purchase (ECommerce Buyer)",
+            "steps": [
+              "User lands on Home or directly on /shop page.",
+              "User selects category (e.g., Liquid Rubber or Primers) or uses the full product grid.",
+              "User views accurate size/color variation pricing (e.g., Liquid Rubber 5L = R790, 20L = R1790) on Product Detail Page.",
+              "User selects container size and adds item to Cart.",
+              "User proceeds to Checkout, enters delivery postal code, and selects Fastway Couriers live rate.",
+              "User selects Paystack (Card) or Payflex (BNPL) payment method and completes order."
+            ],
+            "conversionGoal": "Completed online transaction via Fastway Couriers shipping and instant gateway payment."
+          },
+          {
+            "name": "Problem-Led Application Journey (Contractor / DIYer)",
+            "steps": [
+              "User lands on Home or Applications menu link seeking a solution for a leaking roof or cracked wall.",
+              "User clicks the specific application card (e.g., Roof Waterproofing) instead of encountering a '#' broken link.",
+              "User reads application instructions and recommended system (e.g., Bonding Liquid Primer + Fibre Filler + Liquid Rubber + Membrane).",
+              "User clicks direct product links with accurate pricing cards to add items into cart.",
+              "User completes checkout."
+            ],
+            "conversionGoal": "Multi-product bundle purchase tailored to a specific application need."
+          },
+          {
+            "name": "Technical Validation Journey (Architect / Specifier)",
+            "steps": [
+              "User navigates to 'Help & Advice' or 'How It Works' to verify surface prep and product specs.",
+              "User reads real application guides (replacing placeholder AI articles).",
+              "User moves to Contact page or calls verified primary phone line (+27 11 450 1234) for technical trade pricing.",
+              "User submits trade query form."
+            ],
+            "conversionGoal": "High-value trade lead generation or direct phone contact."
+          }
+        ],
+        "conversionLogic": [
+          "Shop Query Repair: Configure the /shop archive loop to query and display products across all 5 active categories (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) rather than restricting output to a single product.",
+          "Featured Product Pricing Correction: Enforce master retail pricing on homepage cards—explicitly correcting Fibre Filler 20L card to display R1590 (instead of R500) and populating missing prices on Bonding Liquid Primer cards (5L = R500, 20L = R1500).",
+          "Application CTA Routing: Map all homepage Application card 'Read more' buttons and CTAs to functional application routes or direct anchor sections on /applications, eliminating all placeholder '#' links.",
+          "Fulfillment Friction Reduction: Direct WooCommerce checkout to calculate real-time Fastway Couriers shipping rates based on item weight/dimensions and delivery destination, eliminating manual flat-rate confusion.",
+          "Payment Gateway Conversion Boost: Display accepted payment logos (Paystack credit/debit card and Payflex Buy-Now-Pay-Later) prominently in header/footer and checkout to eliminate EFT dependency and build trust.",
+          "Header Hygiene & Trust: Remove placeholder phone number (+27100000000) from header and topbar, displaying only the verified contact line (+27 11 450 1234).",
+          "Blog & Advice Section Integrity: Replace placeholder AI blog teasers and future-dated posts with legitimate guides (Surface Preparation Guide, How to Apply Liquid Rubber, FAQs) linked from 'Help & Advice'."
+        ],
+        "openQuestions": [
+          "Address Reconciliation: The live Contact page displays 'Shop 5, Vision 21 Industrial Park, Steel Road, Duncanville, Vereeniging, 1929', whereas WooCommerce store shipping origin is set to 'Unit 4, Gateway Industrial Park, Edenvale, Johannesburg'. Which physical address should be used as the store shipping origin for Fastway Couriers pickup, and should the Contact page list both or only one?",
+          "Order Notification Recipient: Should order-notification emails be routed to Martin's direct inbox (or an info@uproof.co.za address), and what is the verified outgoing SMTP sender email address for WooCommerce system notifications?",
+          "Fastway & Payment API Credentials: Have live production API keys and account numbers for Fastway Couriers, Paystack, and Payflex been provided by the client for installation by Agent 05?"
+        ]
+      }
+    },
+    {
+      "id": "art_bench_up_design",
+      "type": "design_system",
+      "version": 1,
+      "title": "U-Proof Design System (Stage 3 output)",
+      "summary": "Visual direction and design system specification for U-Proof, establishing a durable, industrial-grade e-commerce interface optimized for South African contractors and DIY builders. The system prioritizes product variant clarity, accurate pricing displays, and seamless checkout confidence.",
+      "content": {
+        "summary": "Visual direction and design system specification for U-Proof, establishing a durable, industrial-grade e-commerce interface optimized for South African contractors and DIY builders. The system prioritizes product variant clarity, accurate pricing displays, and seamless checkout confidence.",
+        "direction": "VISION LIMITATION ACKNOWLEDGMENT: No actual visual renders, screenshots, or visual color files were provided in this job input—only text descriptions gathered from non-JavaScript fetches, project facts, and site blueprints. Therefore, the visual direction and color palette defined here represent a proposed starting design system hypothesis grounded in U-Proof's South African industrial waterproofing and building-products market context, contractor and DIY audience requirements, and existing site structure. A human designer must visually verify the live staging environment prior to final implementation. The visual direction emphasizes rugged durability, professional trust, and clear industrial utility. Layouts prioritize crisp technical typography, high-contrast action elements, prominent size/variation selectors (5L vs 20L; membrane dimensions), and explicit visual badges highlighting performance traits like elastomeric flexibility, UV resistance, and waterproofing durability.",
+        "palette": [
+          {
+            "token": "color-brand-primary",
+            "value": "#1A365D",
+            "usage": "Deep industrial navy for primary site header, prominent visual containers, and main brand elements (proposed starting hypothesis)."
+          },
+          {
+            "token": "color-brand-accent",
+            "value": "#D97706",
+            "usage": "High-visibility safety amber for primary action CTAs, Add to Cart buttons, and active checkout triggers (proposed starting hypothesis)."
+          },
+          {
+            "token": "color-surface-bg",
+            "value": "#F8FAFC",
+            "usage": "Clean light slate background for overall site layout and content section separation."
+          },
+          {
+            "token": "color-surface-card",
+            "value": "#FFFFFF",
+            "usage": "Pure white surface for product cards, variation selectors, and application guides."
+          },
+          {
+            "token": "color-text-main",
+            "value": "#0F172A",
+            "usage": "Dark slate typography for product titles, pricing text, and primary headings."
+          },
+          {
+            "token": "color-text-muted",
+            "value": "#64748B",
+            "usage": "Muted slate for SKU callouts, secondary specs, unit measurements, and helper text."
+          },
+          {
+            "token": "color-border-subtle",
+            "value": "#E2E8F0",
+            "usage": "Light gray border stroke for product cards, variation pills, and tab dividers."
+          },
+          {
+            "token": "color-status-success",
+            "value": "#166534",
+            "usage": "Deep green for in-stock indicators, Fastway shipping calculation verification, and Payflex trust badges."
+          }
+        ],
+        "typography": [
+          {
+            "token": "font-family-heading",
+            "family": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+            "usage": "Bold, highly legible sans-serif for product names, section headings, and promotional callouts."
+          },
+          {
+            "token": "font-family-body",
+            "family": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+            "usage": "Standard clean sans-serif for detailed technical descriptions, coverage specifications, and step-by-step application instructions."
+          },
+          {
+            "token": "font-family-mono",
+            "family": "JetBrains Mono, Courier, monospace",
+            "usage": "Monospaced font for technical specs, product codes, container measurements, and precise pricing tables."
+          }
+        ],
+        "spacingScale": [
+          "0px",
+          "4px",
+          "8px",
+          "12px",
+          "16px",
+          "24px",
+          "32px",
+          "48px",
+          "64px",
+          "96px"
+        ],
+        "components": [
+          "Product Card with Dynamic Size & Color Variation Selector (5L/20L, Pricing Display)",
+          "Category Filter Tab Bar (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane)",
+          "Application Solution Card (Roof Waterproofing, Wall Sealing, Foundation Protection)",
+          "Trust & Payment Badge Banner (Payflex BNPL, Paystack Card, Fastway Live Shipping)",
+          "Product Technical Specification Table & Coverage Calculator",
+          "Header Topbar with Verified Phone Contact (+27 11 450 1234) and Location Info",
+          "Step-by-Step Application Guide Visual Card Container",
+          "Cart & Checkout Order Summary Block with Live Courier Calculation"
+        ],
+        "imageryDirection": [
+          "High-resolution close-up photography demonstrating liquid rubber application on concrete, metal roofing, and parapet walls.",
+          "Before-and-after comparison imagery showcasing effective crack sealing using Fibre Filler and reinforcing membrane.",
+          "Authentic South African job-site photography depicting professional contractors applying U-Proof systems on residential and commercial builds.",
+          "Clean, standardized product render shots displaying 5L and 20L container buckets with prominent U-Proof branding and volume labels.",
+          "Diagrammatic step-by-step application graphics visually detailing the surface preparation, priming, membrane laying, and topcoat sealing sequence."
+        ]
+      }
+    },
+    {
+      "id": "art_bench_up_content",
+      "type": "content_pack",
+      "version": 1,
+      "title": "U-Proof Content Pack (Stage 4 output)",
+      "summary": "This content_pack@1 delivers SEO architecture and page copy for Home, Shop, two product category pages (Liquid Rubber, Membrane) and the three Help & Advice articles (Surface Preparation Guide, How to Apply Liquid Rubber, FAQs), grounded strictly in the supplied site_blueprint sitemap and PROJECT FACTS pricing. Flag for human reviewer: the three Help & Advice articles were previously fake AI-generated placeholder teasers with broken links and future publish dates (per research_report); this pass writes them as real, commissioned, substantive articles with genuine step-by-step content, closing that specific gap. All Fibre Filler 20L references use the correct R1590 price (not the erroneous R500 seen live on featured cards), and all other sizes/prices match the client's real retail price list exactly. Shop page copy describes the intended full 5-category catalog experience per the site_blueprint and design_system, but explicitly notes in its own content that only one category was confirmed rendering live in research and that this should be verified before publishing, per the task's instruction not to claim an unfixed issue is fixed. No new pages, products, or prices were invented beyond what was supplied in site_blueprint and PROJECT FACTS. This artifact is GREEN-tier content proposal only; it does not touch live site configuration, DNS, payment credentials, or shipping settings, and remains subject to the standard BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL pipeline before any publication.",
+      "content": {
+        "summary": "This content_pack@1 delivers SEO architecture and page copy for Home, Shop, two product category pages (Liquid Rubber, Membrane) and the three Help & Advice articles (Surface Preparation Guide, How to Apply Liquid Rubber, FAQs), grounded strictly in the supplied site_blueprint sitemap and PROJECT FACTS pricing. Flag for human reviewer: the three Help & Advice articles were previously fake AI-generated placeholder teasers with broken links and future publish dates (per research_report); this pass writes them as real, commissioned, substantive articles with genuine step-by-step content, closing that specific gap. All Fibre Filler 20L references use the correct R1590 price (not the erroneous R500 seen live on featured cards), and all other sizes/prices match the client's real retail price list exactly. Shop page copy describes the intended full 5-category catalog experience per the site_blueprint and design_system, but explicitly notes in its own content that only one category was confirmed rendering live in research and that this should be verified before publishing, per the task's instruction not to claim an unfixed issue is fixed. No new pages, products, or prices were invented beyond what was supplied in site_blueprint and PROJECT FACTS. This artifact is GREEN-tier content proposal only; it does not touch live site configuration, DNS, payment credentials, or shipping settings, and remains subject to the standard BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL pipeline before any publication.",
+        "seoArchitecture": [
+          "Primary keyword focus by page type: Home targets brand + category head terms ('waterproofing products South Africa', 'U-Proof waterproofing'); Shop and category pages target transactional terms ('buy liquid rubber waterproofing 5L/20L', 'fibre filler crack repair price', 'waterproofing membrane South Africa'); Help & Advice articles target informational long-tail terms ('how to apply liquid rubber', 'surface preparation before waterproofing', 'waterproofing FAQ South Africa').",
+          "Category-page architecture: /shop acts as the top-level catalog hub linking into 5 real category pages (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) so each category can independently rank for its own product-plus-size search terms rather than competing against a single flattened shop page.",
+          "Solution/application layer (/waterproofing-solutions, /applications) sits between Home and Shop to capture problem-led search intent ('leaking roof solution', 'how to seal a cracked wall') and funnel it into the correct product category, supporting the Problem-Led Application Journey from the site blueprint.",
+          "Help & Advice hub structured as a genuine content cluster (not placeholder teasers) with 3 real articles interlinked in a logical sequence (prepare -> apply -> troubleshoot/FAQ), each carrying inline links into the product categories they reference, to build topical authority and support long-tail informational rankings.",
+          "Metadata discipline: every page title and meta description reflects only verified real pricing and real page states from PROJECT FACTS and the research report - no invented prices, no claims that unresolved technical issues (e.g. shop catalog rendering, address/shipping-origin mismatch) are already fixed.",
+          "Trust and local-SEO signals (verified phone +27 11 450 1234, business address once reconciled, Fastway/Paystack/Payflex badges) surfaced consistently across Home, Shop, category and Contact pages to support both conversion and local business search signals once the address discrepancy is resolved by the client.",
+          "Internal linking is structured hub-and-spoke: Home and Shop are hubs; category pages, application anchors and Help & Advice articles are spokes that link back to their hub and sideways to closely related spokes, avoiding orphaned pages."
+        ],
+        "pages": [
+          {
+            "path": "/",
+            "title": "U-Proof | South African Waterproofing & Building Products",
+            "metaDescription": "Shop U-Proof's full waterproofing range - Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers and Membrane - with real SA pricing, trusted by contractors and DIYers nationwide.",
+            "h1": "Waterproofing Solutions Built for South African Conditions",
+            "sections": [
+              "Hero: durable, industrial-grade waterproofing systems for roofs, walls, foundations and joints, with a primary CTA into /shop and a secondary CTA into /waterproofing-solutions.",
+              "Featured Products strip showing accurate pricing per PROJECT FACTS (Liquid Rubber 5L R790/20L R1790, Fibre Filler 5L R790/20L R1590, Bonding Liquid Primer 5L R500/20L R1500) - every card links to its real product page, no unpriced or '#' cards.",
+              "Shop by Category tiles for all 5 categories (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane), each linking straight into its /shop category so visitors are never limited to a single visible product.",
+              "Applications grid (Roof Waterproofing, Wall Sealing, Foundation & Basement Protection, Joint & Crack Repair) with each card routed to its real /applications anchor.",
+              "Trust & Payment badge banner (Fastway Couriers live shipping, Paystack card payment, Payflex Buy-Now-Pay-Later) to reduce reliance on manual EFT and build checkout confidence.",
+              "Real Help & Advice teaser: Surface Preparation Guide, How to Apply Liquid Rubber and FAQs, each linking to its now-real article rather than a placeholder page.",
+              "Company credibility band: manufacturing standards, South African-made, verified contact details (+27 11 450 1234), linking to /about-us and /contact."
+            ]
+          },
+          {
+            "path": "/shop",
+            "title": "Shop All Waterproofing Products | U-Proof",
+            "metaDescription": "Browse U-Proof's complete catalog across 5 categories - Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers and Membrane - with real 5L/20L pricing and size options.",
+            "h1": "Shop the Full U-Proof Waterproofing Range",
+            "sections": [
+              "Category tab bar for all 5 categories (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) with each tab populated by its own product grid, so the catalog is browsable by category rather than defaulting to a single product.",
+              "Product grid cards showing real size/price variants per PROJECT FACTS, e.g. Liquid Rubber 5L R790/20L R1790, Fibre Filler 5L R790/20L R1590 (not the incorrect R500 figure), Wall & Roof Paint 5L R600/20L R1290, Zinc Phosphate Primer 5L R700/20L R1500, Bonding Liquid Primer 5L R500/20L R1500, Plaster Primer 5L R500/20L R1000, and Membrane widths 100mm-1m from R199 to R999.",
+              "Filter and sort controls (by category, size, price) to help contractors quickly locate the right container size or membrane width.",
+              "Trust strip reiterating live Fastway Couriers shipping calculation at checkout and available Paystack/Payflex payment options.",
+              "Note: this page is written to reflect the intended full 5-category catalog experience; category coverage should be verified live before this copy goes out, since a prior technical finding showed only one category rendering."
+            ]
+          },
+          {
+            "path": "/product-category/liquid-rubber",
+            "title": "Liquid Rubber Waterproof Sealant | U-Proof",
+            "metaDescription": "U-Proof Liquid Rubber - elastomeric waterproof sealant for roofs, walls and joints. Available in 5L (R790) and 20L (R1790) containers.",
+            "h1": "Liquid Rubber Waterproof Sealant",
+            "sections": [
+              "Product overview: flexible, UV-resistant elastomeric coating for roofs, parapet walls, gutters and general waterproofing repairs.",
+              "Size and price selector: 5L = R790, 20L = R1790, with clear coverage-per-litre guidance to help buyers choose the right container.",
+              "Application highlights: single-component, brush or roller applied, cures to a seamless rubberised membrane.",
+              "Recommended system pairing: Bonding Liquid Primer for surface prep, Fibre Filler for cracks, and Membrane for reinforced joints - each linking to its category.",
+              "Link to the real 'How to Apply Liquid Rubber' guide under Help & Advice for step-by-step application instructions.",
+              "Link through to /applications#roof-waterproofing and /applications#joint-crack-repair for relevant use-case detail."
+            ]
+          },
+          {
+            "path": "/product-category/membrane",
+            "title": "Reinforcing Membrane | U-Proof",
+            "metaDescription": "U-Proof reinforcing membrane in 100mm, 200mm, 300mm, 500mm and 1m widths (50m rolls) from R199 - built for joint, crack and seam reinforcement under Liquid Rubber systems.",
+            "h1": "Reinforcing Membrane for Joints, Cracks & Seams",
+            "sections": [
+              "Product overview: woven reinforcing fabric used with Liquid Rubber and Fibre Filler to bridge joints, cracks and seams for long-term crack resistance.",
+              "Width and price selector: 100mm x 50m = R199, 200mm x 50m = R299, 300mm x 50m = R399, 500mm x 50m = R499, 1m x 50m = R999 - each width mapped to its typical use case (fine cracks vs. wide seams vs. full parapet wrap).",
+              "Guidance on selecting membrane width based on crack size and application area, with a link to the Surface Preparation Guide for correct installation sequencing.",
+              "System pairing callout: apply between coats of Liquid Rubber, or over Fibre Filler-treated cracks, for a fully reinforced waterproof layer.",
+              "Link through to /applications#joint-crack-repair as the primary recommended use case."
+            ]
+          },
+          {
+            "path": "/help-advice/surface-preparation-guide",
+            "title": "Surface Preparation Guide for Waterproofing | U-Proof Help & Advice",
+            "metaDescription": "A real, practical guide to preparing roofs, walls and concrete surfaces before waterproofing - cleaning, repairing, priming and moisture-checking, from U-Proof.",
+            "h1": "How to Prepare a Surface Before Waterproofing",
+            "sections": [
+              "Why surface preparation matters: adhesion failure is the leading cause of waterproofing system failure, more than product quality itself.",
+              "Step 1 - Clean: remove dust, loose paint, algae and grease; guidance on pressure-washing and drying times before proceeding.",
+              "Step 2 - Repair: fill cracks and holes with Fibre Filler before priming, with a direct link to /product-category/fibre-filler.",
+              "Step 3 - Prime: choose the correct primer for the substrate - Zinc Phosphate Primer for metal roofing, Bonding Liquid Primer for smooth/dense surfaces, Plaster Primer for new plaster - linking to /product-category/primers.",
+              "Step 4 - Moisture check: how to confirm a surface is dry enough to proceed, including a simple plastic-sheet moisture test contractors can do on site.",
+              "Step 5 - Reinforce: where to add Membrane over joints and cracks before the topcoat, linking to /product-category/membrane.",
+              "Next step callout linking forward to 'How to Apply Liquid Rubber' as the natural continuation of this guide."
+            ]
+          },
+          {
+            "path": "/help-advice/how-to-apply-liquid-rubber",
+            "title": "How to Apply Liquid Rubber | U-Proof Help & Advice",
+            "metaDescription": "Step-by-step instructions for applying U-Proof Liquid Rubber to roofs, walls and joints, including coverage rates, drying times and tool recommendations.",
+            "h1": "How to Apply Liquid Rubber the Right Way",
+            "sections": [
+              "Before you start: confirm the surface has been prepared per the Surface Preparation Guide (linked), and check ambient temperature and weather forecast (avoid application before rain).",
+              "Tools needed: brush, roller or squeegee, mixing paddle, and Membrane strips for joints and cracks (linked to /product-category/membrane).",
+              "Step-by-step application: first coat, embedding membrane into a wet first coat over joints/cracks, second coat once tack-free, recommended coverage rate per litre based on container size (5L vs 20L, linked to /product-category/liquid-rubber for sizing/pricing).",
+              "Drying and curing times between coats and before the surface is exposed to foot traffic or rain.",
+              "Common mistakes to avoid: applying too thin a coat, skipping primer on porous or metal substrates, applying in direct midday heat.",
+              "Maintenance tips: periodic inspection and recoating schedule for roofs versus walls.",
+              "Related reading link to FAQs for troubleshooting questions like bubbling, poor adhesion or colour fading."
+            ]
+          },
+          {
+            "path": "/help-advice/faqs",
+            "title": "Frequently Asked Questions | U-Proof Help & Advice",
+            "metaDescription": "Answers to common U-Proof waterproofing questions - coverage rates, drying times, size selection, primer choice, and shipping/payment options.",
+            "h1": "Frequently Asked Questions",
+            "sections": [
+              "Product questions: How much Liquid Rubber do I need per square metre? What's the difference between 5L and 20L containers? Do I need Membrane for every joint?",
+              "Primer selection: Which primer do I use on metal roofing vs. new plaster vs. old painted walls? (Linking Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer to /product-category/primers.)",
+              "Application questions: How long between coats? Can I apply in cold or wet weather? How long until the surface can take foot traffic?",
+              "Ordering and delivery: How is shipping calculated? (Live Fastway Couriers rates at checkout, based on order weight and delivery address.) What payment methods are accepted? (Paystack card payment and Payflex Buy-Now-Pay-Later.)",
+              "Trade and bulk queries: How do I get trade pricing? Linking through to /contact for direct trade inquiries and the verified phone line.",
+              "Still have a question? CTA linking to /contact with the verified phone number and trade inquiry form."
+            ]
+          }
+        ],
+        "internalLinking": [
+          "Home hero + featured product cards link directly to real product detail URLs (not '#') within /shop category pages, e.g. Fibre Filler card -> /product-category/fibre-filler with correct R790/R1590 pricing shown.",
+          "Home 'Applications' teaser cards link to matching anchors on /applications (#roof-waterproofing, #wall-sealing, #foundation-protection, #joint-crack-repair) instead of placeholder '#' links.",
+          "/shop category tab bar cross-links all 5 categories to each other (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) so users can move between them without returning to Home.",
+          "Each /shop category page links out to the relevant /applications anchor (e.g. Membrane category -> Joint & Crack Repair) and to the relevant Help & Advice guide (e.g. Liquid Rubber category -> /help-advice/how-to-apply-liquid-rubber).",
+          "/help-advice/surface-preparation-guide links forward to /help-advice/how-to-apply-liquid-rubber as the logical next step, and both link back to /help-advice/faqs for troubleshooting questions.",
+          "All three Help & Advice articles link to relevant product category pages inline where a product is named (e.g. 'Bonding Liquid Primer' text links to /product-category/primers) so technical readers can purchase directly from educational content.",
+          "/help-advice hub page links to all 3 articles plus back to /how-it-works for the full step-by-step system overview.",
+          "Footer and header include a persistent link to /contact (verified phone +27 11 450 1234) from every page, replacing any placeholder-number references site-wide.",
+          "Home page and every product category page link to /waterproofing-solutions as the mid-funnel authority hub for commercial/residential/industrial framing before a user commits to a category.",
+          "Applications page (Roof/Wall/Foundation/Joint sections) links directly to the specific product categories used in each recommended system, and back to Shop for the full catalog."
+        ]
+      }
+    },
+    {
+      "id": "art_bench_up_buildplan",
+      "type": "build_plan",
+      "version": 1,
+      "title": "U-Proof Build Plan (Stage 5 output)",
+      "summary": "Build plan translating the approved Stage 2-4 artifacts (site_blueprint, design_system, content_pack) into discrete Elementor/WooCommerce implementation tickets for U-Proof. This is a read-only planning pass: no credentials or tool access exist in this run, and nothing described below has been executed. Tickets cover global design system setup, Home/Shop/category/Applications/Help & Advice page builds, the shop-catalog query fix, featured-price corrections, hash-link removal, and WooCommerce category/variation configuration for the 5 product categories. All tickets remain inside the BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE pipeline; RED-tier items (shipping, payment credentials, DNS) are explicitly excluded from build scope and listed only as risks/open questions per prior audit history.",
+      "content": {
+        "summary": "Build plan translating the approved Stage 2-4 artifacts (site_blueprint, design_system, content_pack) into discrete Elementor/WooCommerce implementation tickets for U-Proof. This is a read-only planning pass: no credentials or tool access exist in this run, and nothing described below has been executed. Tickets cover global design system setup, Home/Shop/category/Applications/Help & Advice page builds, the shop-catalog query fix, featured-price corrections, hash-link removal, and WooCommerce category/variation configuration for the 5 product categories. All tickets remain inside the BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE pipeline; RED-tier items (shipping, payment credentials, DNS) are explicitly excluded from build scope and listed only as risks/open questions per prior audit history.",
+        "tickets": [
+          {
+            "title": "Global Elementor Design System Setup (Tokens & Site Kit)",
+            "objective": "Implement the design_system v1 tokens (palette: color-brand-primary #1A365D, color-brand-accent #D97706, color-surface-bg #F8FAFC, color-surface-card #FFFFFF, color-text-main #0F172A, color-text-muted #64748B, color-border-subtle #E2E8F0, color-status-success #166534; typography: Inter for heading/body, JetBrains Mono for technical specs/pricing; spacing scale 0-96px) into Elementor's global Site Settings (Global Colors, Global Fonts, Layout Settings) so all subsequent page/component builds inherit a single source of truth, without altering existing page content yet.",
+            "scope": [
+              "Elementor Site Settings > Global Colors",
+              "Elementor Site Settings > Global Fonts/Typography",
+              "Elementor Site Settings > Layout/Container spacing presets",
+              "Creation of reusable global style presets for the 8 components listed in design_system (Product Card, Category Filter Tab Bar, Application Solution Card, Trust & Payment Badge Banner, Spec Table/Coverage Calculator, Header Topbar, Step-by-Step Guide Card, Cart/Checkout Summary Block) as empty/styled templates only"
+            ],
+            "doNotChange": [
+              "Existing live page content on Home/Shop/category/Applications/Help & Advice pages",
+              "WooCommerce settings of any kind",
+              "Payment gateway configuration",
+              "Shipping configuration",
+              "DNS or hosting settings",
+              "Header topbar phone number content (handled in its own ticket)"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Header Topbar Rebuild - Verified Contact Info Only",
+            "objective": "Rebuild the Header Topbar component per design_system spec to display only the verified phone number +27 11 450 1234 and location info, removing the placeholder pattern +27100000000 noted in prior audit, using the new global design tokens.",
+            "scope": [
+              "Header template topbar section (phone number, location text)",
+              "Application of global color/typography tokens to topbar"
+            ],
+            "doNotChange": [
+              "Main navigation menu structure/links",
+              "Footer content",
+              "Payment/shipping badge banner (separate ticket)",
+              "Any DNS, domain, or hosting-level configuration"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Home Page Rebuild - Hero, Featured Products, Category Tiles, Applications Grid, Trust Banner, Help & Advice Teaser",
+            "objective": "Rebuild the Home page (/) per content_pack v1 copy and site_blueprint sections: Hero with CTA into /shop and /waterproofing-solutions; Featured Products strip using corrected PROJECT FACTS pricing (Liquid Rubber 5L R790/20L R1790, Fibre Filler 5L R790/20L R1590, Bonding Liquid Primer 5L R500/20L R1500); Shop by Category tiles for all 5 categories linking to their real /product-category/* URLs; Applications grid with 4 cards routed to real /applications anchors (#roof-waterproofing, #wall-sealing, #foundation-protection, #joint-crack-repair); Trust & Payment badge banner listing Fastway/Paystack/Payflex as informational badges only (no live integration claims); Help & Advice teaser linking to the 3 real article URLs; credibility band linking to /about-us and /contact.",
+            "scope": [
+              "Home page Elementor layout rebuild using approved global design tokens",
+              "Featured Product card price corrections per PROJECT FACTS",
+              "Category tile links to /product-category/liquid-rubber, /product-category/fibre-filler, /product-category/wall-roof-paint, /product-category/primers, /product-category/membrane",
+              "Applications grid CTA link targets (# removal, real anchor/route mapping)",
+              "Help & Advice teaser links to /help-advice/surface-preparation-guide, /help-advice/how-to-apply-liquid-rubber, /help-advice/faqs",
+              "Insertion of content_pack-supplied Home page copy, H1, and section text"
+            ],
+            "doNotChange": [
+              "Shop page template",
+              "Product category page templates",
+              "WooCommerce checkout/cart flow",
+              "Payment gateway credentials or activation status",
+              "Shipping method configuration",
+              "Any '#' link outside Home page CTAs not covered by content_pack"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Shop-Catalog Query Fix - Restore All 5 Categories to /shop Archive Loop",
+            "objective": "Correct the /shop Elementor/WooCommerce archive loop query (per site_blueprint conversionLogic 'Shop Query Repair') so it pulls products from all 5 active categories (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Primers, Membrane) rather than restricting output to a single category/product, matching the intended full-catalog experience described in content_pack. Live behavior must be re-verified fresh before this is marked resolved - prior audit found only one category rendering.",
+            "scope": [
+              "Shop archive page Elementor Loop Grid / Products widget query settings (category filter, taxonomy inclusion)",
+              "Category Filter Tab Bar component wiring for all 5 categories",
+              "Shop page copy/H1 insertion per content_pack"
+            ],
+            "doNotChange": [
+              "Individual product data/pricing (handled in WooCommerce category tickets)",
+              "Checkout, cart, or payment flow",
+              "Any category page template layout beyond confirming query inclusion",
+              "Shipping configuration"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Featured & Category Card Price Corrections (Site-Wide Sweep)",
+            "objective": "Sweep all Elementor-built price display cards site-wide (Home featured strip, Shop archive cards, category page cards) to enforce PROJECT FACTS master retail pricing, explicitly correcting the known Fibre Filler 20L card error (was showing R500, must show R1590) and populating any missing Bonding Liquid Primer prices (5L=R500, 20L=R1500). This ticket only corrects front-end display text/bindings pulled from WooCommerce product data - it does not change WooCommerce product prices themselves (see separate WooCommerce category ticket).",
+            "scope": [
+              "Home page featured product card price text/bindings",
+              "Shop archive product card price display",
+              "Liquid Rubber and Membrane category page price displays (per content_pack coverage)",
+              "Verification pass confirming displayed prices match PROJECT FACTS pricing table for all 5 categories"
+            ],
+            "doNotChange": [
+              "Underlying WooCommerce product/variation price data entry (separate ticket)",
+              "Payment gateway settings",
+              "Shipping settings",
+              "Non-pricing content on these pages"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Hash-Link Removal - Applications & Homepage CTA Routing",
+            "objective": "Identify and replace every placeholder '#' link previously used on homepage Application cards and CTAs with functional routes: either the dedicated /applications page anchors (#roof-waterproofing, #wall-sealing, #foundation-protection, #joint-crack-repair) or other real, existing destination pages named in site_blueprint. No new pages are to be invented if a target does not yet exist - such gaps must be flagged, not silently linked elsewhere.",
+            "scope": [
+              "Homepage Application card CTA hrefs",
+              "Any other on-page '#' links discovered during this pass on Home, Shop, and Applications pages",
+              "Cross-check against site_blueprint sitemap to confirm each target route/anchor actually exists before linking"
+            ],
+            "doNotChange": [
+              "Navigation menu structure",
+              "Any link outside the Application-card/CTA context named in site_blueprint conversionLogic",
+              "Payment or shipping related links/badges"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Applications Page Build - 4 Solution Cards with Anchor IDs",
+            "objective": "Build/complete the /applications page per site_blueprint sitemap using the Application Solution Card component from design_system, with 4 cards (Roof Waterproofing, Wall Sealing, Foundation & Basement Protection, Joint & Crack Repair) each carrying the correct anchor ID (#roof-waterproofing, #wall-sealing, #foundation-protection, #joint-crack-repair) so homepage CTAs resolve correctly, per the Problem-Led Application Journey in site_blueprint.",
+            "scope": [
+              "/applications page Elementor layout using Application Solution Card component",
+              "Anchor ID assignment matching site_blueprint sitemap children paths",
+              "Linking each card's recommended-system content to real product category pages where content_pack/site_blueprint specifies (e.g., Bonding Liquid Primer + Fibre Filler + Liquid Rubber + Membrane for Roof Waterproofing) - only where such copy was actually supplied"
+            ],
+            "doNotChange": [
+              "Home page CTA link targets (separate ticket handles the linking side)",
+              "Product pricing or WooCommerce data",
+              "Shipping/payment configuration"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Help & Advice Hub + 3 Real Articles - Replace Placeholder AI Content",
+            "objective": "Build the /help-advice hub and its 3 child article pages (Surface Preparation Guide, How to Apply Liquid Rubber, Frequently Asked Questions) using the real, commissioned copy supplied in content_pack v1, replacing the previously identified fake AI-generated placeholder teaser section with broken links and future publish dates. Each article must carry the SEO title/meta/H1 from content_pack and inline links into referenced product categories as specified.",
+            "scope": [
+              "/help-advice hub page layout and internal links",
+              "/help-advice/surface-preparation-guide page build (copy, H1, meta per content_pack)",
+              "/help-advice/how-to-apply-liquid-rubber page build (copy, H1, meta per content_pack)",
+              "/help-advice/faqs page build (copy, H1, meta per content_pack)",
+              "Removal of the fake 'recent articles' teaser section and its broken links from wherever it currently appears (e.g., homepage) once confirmed present"
+            ],
+            "doNotChange": [
+              "Publish dates/scheduling beyond what content_pack specifies (no invented future-dating)",
+              "Any product pricing or WooCommerce data",
+              "Applications page content",
+              "Shop/category page templates"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Liquid Rubber Category Page Build",
+            "objective": "Build /product-category/liquid-rubber using content_pack copy for Liquid Rubber and the Product Card with Size Variation Selector component (5L=R790, 20L=R1790 per PROJECT FACTS), ensuring the category displays correctly within the repaired shop query.",
+            "scope": [
+              "Liquid Rubber category page Elementor layout",
+              "SEO title/meta/H1 insertion from content_pack",
+              "Product Card component styling per design_system tokens"
+            ],
+            "doNotChange": [
+              "WooCommerce product/variation data entry (separate WooCommerce ticket)",
+              "Other category pages",
+              "Shop archive query logic (separate ticket)"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Membrane Category Page Build",
+            "objective": "Build /product-category/membrane using content_pack copy for Membrane and the Product Card component reflecting the 5 real width/length variants and pricing (100mm=R199, 200mm=R299, 300mm=R399, 500mm=R499, 1m=R999 per PROJECT FACTS).",
+            "scope": [
+              "Membrane category page Elementor layout",
+              "SEO title/meta/H1 insertion from content_pack",
+              "Product Card component styling per design_system tokens"
+            ],
+            "doNotChange": [
+              "WooCommerce product/variation data entry (separate WooCommerce ticket)",
+              "Other category pages",
+              "Shop archive query logic (separate ticket)"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "Fibre Filler, Wall & Roof Paint, Primers Category Pages - Template Parity Build",
+            "objective": "Build /product-category/fibre-filler, /product-category/wall-roof-paint, and /product-category/primers using the same Product Card / category-page template pattern established for Liquid Rubber and Membrane, since no dedicated content_pack copy was supplied for these three categories beyond the site_blueprint sitemap entries and PROJECT FACTS pricing. Flag to human reviewer that bespoke SEO copy for these 3 categories was not part of content_pack v1 and needs a follow-up content pass before this ticket can be considered content-complete.",
+            "scope": [
+              "Fibre Filler category page layout (template parity with Liquid Rubber/Membrane)",
+              "Wall & Roof Paint category page layout (template parity)",
+              "Primers category page layout (template parity) - note Primers category spans two real product lines per PROJECT FACTS (Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer)",
+              "Placeholder-free pricing display using PROJECT FACTS figures only"
+            ],
+            "doNotChange": [
+              "Invented SEO copy beyond what exists in content_pack/site_blueprint",
+              "WooCommerce product/variation data entry (separate ticket)",
+              "Shop archive query logic"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "WooCommerce Category & Variation Configuration - Liquid Rubber",
+            "objective": "Configure/verify the Liquid Rubber WooCommerce product category with Size variation structure (5L=R790, 20L=R1790) matching PROJECT FACTS, per prior audit noting this structure was previously built and verified but should be re-checked for drift.",
+            "scope": [
+              "WooCommerce product category taxonomy assignment for Liquid Rubber SKU(s)",
+              "Size attribute/variation setup (5L, 20L) with correct prices",
+              "Stock status/visibility settings needed for the item to appear in the repaired shop query"
+            ],
+            "doNotChange": [
+              "Payment gateway settings",
+              "Shipping settings/zones",
+              "Other product categories",
+              "Product imagery/media library beyond what already exists"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "WooCommerce Category & Variation Configuration - Fibre Filler",
+            "objective": "Configure/verify the Fibre Filler WooCommerce product category with Size variation structure (5L=R790, 20L=R1590 per PROJECT FACTS), explicitly correcting the known live error where the 20L variant/card showed R500 instead of R1590.",
+            "scope": [
+              "WooCommerce product category taxonomy assignment for Fibre Filler SKU(s)",
+              "Size attribute/variation setup (5L, 20L) with corrected prices",
+              "Cross-check against any cached/derived price displays elsewhere on site referencing this product"
+            ],
+            "doNotChange": [
+              "Payment gateway settings",
+              "Shipping settings/zones",
+              "Other product categories"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "WooCommerce Category & Variation Configuration - Wall & Roof Paint",
+            "objective": "Configure/verify the Wall & Roof Paint WooCommerce product category with Size variation structure (5L=R600, 20L=R1290 per PROJECT FACTS).",
+            "scope": [
+              "WooCommerce product category taxonomy assignment for Wall & Roof Paint SKU(s)",
+              "Size attribute/variation setup (5L, 20L) with correct prices"
+            ],
+            "doNotChange": [
+              "Payment gateway settings",
+              "Shipping settings/zones",
+              "Other product categories"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "WooCommerce Category & Variation Configuration - Primers (Zinc Phosphate, Bonding Liquid, Plaster)",
+            "objective": "Configure/verify the Primers WooCommerce product category covering the three real primer product lines per PROJECT FACTS: Zinc Phosphate Primer (5L=R700, 20L=R1500), Bonding Liquid Primer (5L=R500, 20L=R1500), Plaster Primer (5L=R500, 20L=R1000), ensuring all three are correctly categorized and variation-priced, and that Bonding Liquid Primer pricing is populated site-wide where it was previously missing.",
+            "scope": [
+              "WooCommerce product category taxonomy assignment for all 3 primer product lines",
+              "Size attribute/variation setup for each of the 3 primer products with correct prices",
+              "Verification that each primer product appears correctly under the single /product-category/primers taxonomy"
+            ],
+            "doNotChange": [
+              "Payment gateway settings",
+              "Shipping settings/zones",
+              "Other product categories"
+            ],
+            "permissionLevel": "AMBER"
+          },
+          {
+            "title": "WooCommerce Category & Variation Configuration - Membrane",
+            "objective": "Configure/verify the Membrane WooCommerce product category with Size (width x length) variation structure across the 5 real variants (100mm x 50m=R199, 200mm x 50m=R299, 300mm x 50m=R399, 500mm x 50m=R499, 1m x 50m=R999 per PROJECT FACTS), per prior audit noting this structure was previously built and verified but should be re-checked for drift.",
+            "scope": [
+              "WooCommerce product category taxonomy assignment for Membrane SKU(s)",
+              "Size variation setup for all 5 width/length combinations with correct prices"
+            ],
+            "doNotChange": [
+              "Payment gateway settings",
+              "Shipping settings/zones",
+              "Other product categories"
+            ],
+            "permissionLevel": "AMBER"
+          }
+        ],
+        "risks": [
+          "This is a read-only planning pass: Agent 05 holds no site credentials, WP-CLI/SSH, or execution tools in this run. Nothing in this build_plan has been built, previewed, or published - it is a proposal for human-supervised execution only.",
+          "Prior audit (2026-09-02) found no shipping zones/methods configured and a silent no-shipping checkout; this build_plan deliberately excludes any shipping configuration (RED-tier - carrier account/credentials) and flags it as an unresolved open question rather than a completed fix.",
+          "Fastway Couriers live-rate integration referenced throughout site_blueprint/content_pack as the intended checkout experience has no confirmed credentials or account setup as of last audit; until resolved, checkout cannot actually deliver live courier rates regardless of any front-end badge/copy work done in these tickets.",
+          "Paystack and Payflex were installed but never configured with real credentials per prior audit; this build_plan does not configure payment gateways (RED-tier) and any 'Trust & Payment Badge' components built under these tickets must not be interpreted as evidence that payments are live.",
+          "Only BACS/Cheque/COD are currently enabled as payment methods per prior audit; if this has not changed, the site's actual checkout path diverges materially from the Payflex/Paystack-first conversion logic in site_blueprint, and front-end badge work could mislead customers if published before gateways are truly configured.",
+          "A third-party 10Web trial domain (allowed-pony.10web.cloud) was found hardcoded into compiled Shop/Product/Cart/Checkout build files for logo/breadcrumb/footer/payment-icon assets as of 2026-09-02; it was stripped from on-disk files in a housekeeping pass but not independently re-verified live since - any Elementor rebuild in this plan must re-check for and eliminate this dependency, and its current live status is unconfirmed.",
+          "WooCommerce shipping-origin address reconciliation with the Contact page address (Unit 4, Gateway Industrial Park, Sebenza, Edenvale, Johannesburg) was corrected as of the last audit but has not been re-verified fresh; address drift could silently break any future live shipping-rate calculation.",
+          "Order-notification emails were found going to Creative Touch's own address rather than the client's business inbox, and the outgoing from-address used a leftover third-party domain; both were flagged but not resolved in the prior audit and are not addressed by this build_plan (outside Agent 05's WordPress/Elementor/WooCommerce catalog scope as defined here).",
+          "content_pack v1 itself flags that only one product category was confirmed rendering live in research on /shop, and explicitly states this must be verified fresh before publishing any claim that the 5-category catalog is fixed; the Shop-Catalog Query Fix ticket addresses the intended fix but its actual live effect must be QA-verified before any launch claim is made.",
+          "Bespoke SEO copy for Fibre Filler, Wall & Roof Paint, and Primers category pages was not supplied in content_pack v1 (only Liquid Rubber and Membrane had dedicated copy); the corresponding ticket builds template-parity pages using only site_blueprint/PROJECT FACTS data and flags the copy gap rather than inventing content.",
+          "A placeholder-style phone number pattern (+27100000000) was noted in prior audit; this build_plan assumes it is still present and schedules its removal, but this has not been freshly re-verified as still live.",
+          "No actual visual renders, screenshots, or brand color files were supplied to the design_system stage - the palette/typography tokens in this plan are a proposed hypothesis requiring human designer sign-off against the live/staging visual state before implementation proceeds past PREVIEW.",
+          "All AMBER-tier tickets in this plan require explicit human approval before any execution step is taken, per doctrine; none of the structural/template changes described here may be auto-applied."
+        ]
+      }
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "kn_doctrine_pipeline",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Every build passes through the safety pipeline",
+      "content": "BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE. No stage may be skipped by an agent.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine SAFETY_PIPELINE"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_permissions",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "GREEN / AMBER / RED permission tiers",
+      "content": "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine PERMISSION_MODEL"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_launch",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Launch never auto-approves",
+      "content": "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "appr_up_launch"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_learning",
+      "scope": "DOCTRINE",
+      "category": "process",
+      "title": "Agents propose; humans approve knowledge",
+      "content": "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "CTOS-001 Part F"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_pricing",
+      "scope": "PROJECT",
+      "category": "content",
+      "title": "U-Proof real product pricing",
+      "content": "Real current retail pricing supplied by the client (Martin), VAT-inclusive ZAR, as recorded by Creative Touch and applied to the store's product data:\nLiquid Rubber: 5L=R790, 20L=R1790.\nFibre Filler: 5L=R790, 20L=R1590.\nWall & Roof Paint: 5L=R600, 20L=R1290.\nZinc Phosphate Primer: 5L=R700, 20L=R1500.\nBonding Liquid Primer: 5L=R500, 20L=R1500.\nPlaster Primer: 5L=R500, 20L=R1000.\nMembrane: 100mm x 50m=R199, 200mm x 50m=R299, 300mm x 50m=R399, 500mm x 50m=R499, 1m x 50m=R999.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client-supplied price list"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_audit_history",
+      "scope": "PROJECT",
+      "category": "qa",
+      "title": "U-Proof prior Creative Touch audit history (as of 2026-09-02)",
+      "content": "Creative Touch's own prior hands-on technical audit history for this project (most recent pass 2026-09-02): no shipping zones/methods configured (test order confirmed silent no-shipping checkout, since deleted); only BACS/Cheque/COD enabled, Paystack/Payflex installed but never configured with real credentials; compiled Shop/Product/Cart/Checkout build files were found hardcoding a third-party 10Web trial domain (allowed-pony.10web.cloud) for logo/breadcrumb/footer/payment-icon assets, confirmed live and customer-facing as of 2026-09-02, then stripped from on-disk build files in a housekeeping pass (not independently re-verified live since); a fake 'recent articles' teaser section (FAQs, How to Apply Liquid Rubber, Surface Preparation Guide) on the homepage links to non-existent pages, left from an earlier AI-generated clone; real broken homepage CTA links were found and fixed; a placeholder-style phone number pattern (+27100000000) was noted; WooCommerce shipping-origin address was corrected to match the Contact page's address at the time (Unit 4, Gateway Industrial Park, Sebenza, Edenvale, Johannesburg); order-notification emails were going to Creative Touch's own address rather than the client's business inbox, and the outgoing from-address was a leftover third-party domain - both flagged, not resolved; security hardening was applied (headers, stripped version-disclosure tags, removed exposed backup files); real Size and Size x Color variation structures were built and verified for Liquid Rubber, Fibre Filler, Wall & Roof Paint and Membrane with real pricing. None of this should be assumed still accurate without checking fresh evidence - several items already appear to have changed.",
+      "status": "APPROVED",
+      "confidence": 0.9,
+      "evidence": [
+        "CT internal audit rounds 1-3, 2026-08-31 to 2026-09-02"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_business",
+      "scope": "PROJECT",
+      "category": "client",
+      "title": "U-Proof business context",
+      "content": "The client (Martin) owns a South African waterproofing/building-products company, U-Proof. Creative Touch is rebuilding/completing the company's ecommerce website on WordPress + WooCommerce after a prior developer relationship broke down without a proper handover. The client likes the existing design and wants it completed and improved, not redesigned. The client does not want manual/flat-rate shipping and prefers live courier rates (Fastway Couriers); Payflex (SA buy-now-pay-later) was under evaluation alongside a standard card gateway, because the client does not want EFT/manual payment as the primary path.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client intake"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    }
+  ],
+  "requiredOutputSchema": "qa_report@1"
+}

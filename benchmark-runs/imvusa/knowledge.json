@@ -1,0 +1,82 @@
+[
+    {
+        "id":  "kn_doctrine_pipeline",
+        "scope":  "DOCTRINE",
+        "category":  "safety",
+        "title":  "Every build passes through the safety pipeline",
+        "content":  "BUILD -\u003e PREVIEW -\u003e HUMAN DESIGN APPROVAL -\u003e QA -\u003e FINAL REGRESSION AUDIT -\u003e CONTROLLED ACTIVATION TESTING -\u003e HUMAN LAUNCH APPROVAL -\u003e LIVE. No stage may be skipped by an agent.",
+        "status":  "APPROVED",
+        "confidence":  1,
+        "evidence":  [
+                         "state-machine SAFETY_PIPELINE"
+                     ],
+        "projectId":  null,
+        "jobId":  null,
+        "proposedByAgentId":  null,
+        "reviewedBy":  "Production Lead",
+        "reviewedById":  null,
+        "reviewedAt":  null,
+        "createdAt":  null,
+        "updatedAt":  null
+    },
+    {
+        "id":  "kn_doctrine_permissions",
+        "scope":  "DOCTRINE",
+        "category":  "safety",
+        "title":  "GREEN / AMBER / RED permission tiers",
+        "content":  "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+        "status":  "APPROVED",
+        "confidence":  1,
+        "evidence":  [
+                         "state-machine PERMISSION_MODEL"
+                     ],
+        "projectId":  null,
+        "jobId":  null,
+        "proposedByAgentId":  null,
+        "reviewedBy":  "Production Lead",
+        "reviewedById":  null,
+        "reviewedAt":  null,
+        "createdAt":  null,
+        "updatedAt":  null
+    },
+    {
+        "id":  "kn_doctrine_launch",
+        "scope":  "DOCTRINE",
+        "category":  "safety",
+        "title":  "Launch never auto-approves",
+        "content":  "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+        "status":  "APPROVED",
+        "confidence":  1,
+        "evidence":  [
+                         "appr_up_launch"
+                     ],
+        "projectId":  null,
+        "jobId":  null,
+        "proposedByAgentId":  null,
+        "reviewedBy":  "Production Lead",
+        "reviewedById":  null,
+        "reviewedAt":  null,
+        "createdAt":  null,
+        "updatedAt":  null
+    },
+    {
+        "id":  "kn_doctrine_learning",
+        "scope":  "DOCTRINE",
+        "category":  "process",
+        "title":  "Agents propose; humans approve knowledge",
+        "content":  "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+        "status":  "APPROVED",
+        "confidence":  1,
+        "evidence":  [
+                         "CTOS-001 Part F"
+                     ],
+        "projectId":  null,
+        "jobId":  null,
+        "proposedByAgentId":  null,
+        "reviewedBy":  "Production Lead",
+        "reviewedById":  null,
+        "reviewedAt":  null,
+        "createdAt":  null,
+        "updatedAt":  null
+    }
+]

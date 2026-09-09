@@ -1,0 +1,760 @@
+{
+  "runLabel": "CROSS-SITE - Orchestrator synthesis -> cross_site_agent_evaluation@1",
+  "agent": {
+    "code": "ORCH",
+    "shortCode": "ORCH",
+    "name": "Orchestrator",
+    "role": "Workflow coordination & human approval gates",
+    "responsibilities": [
+      "Coordinates the complete workflow",
+      "Routes work to specialist agents",
+      "Enforces human approval gates"
+    ],
+    "requiredCapabilities": [
+      "text",
+      "structured_output",
+      "long_context"
+    ],
+    "permissionLevel": "AMBER",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "orchestrate",
+  "instructions": "Compare the U-Proof KNOWN benchmark run (agent_benchmark_report@1 - agents had access to real prior Creative Touch project knowledge/audit history for U-Proof) against the Imvusa BLIND benchmark run (blind_benchmark_report@1 - agents had ONLY approved doctrine, no project-specific prior knowledge, genuinely new site). Score exactly these 7 dimensions, each with a uProofAssessment, imvusaAssessment, and verdict: independent_discovery_quality (how much real, non-obvious discovery happened without prior knowledge to lean on - Imvusa is the harder test of this since it had zero project history); generic_vs_site_specific (did findings actually reference real, specific site details - phone numbers, page names, duplicated content, price figures - versus generic boilerplate advice that could apply to any site); hallucinations (did any stage invent facts, pages, prices, competitors, or credentials not traceable to real evidence - be specific about any found in either run, or state none found); implementation_specificity (how concrete and actionable was build_plan in each run); visual_reasoning_quality (both runs disclosed no real vision input - assess how honestly and usefully that limitation was handled in each); seo_reasoning_quality (content_pack quality, honesty about the business model - ecommerce for U-Proof vs lead-gen for Imvusa); qa_challenge_quality (how substantively did Stage 6 QA actually challenge prior stages in each run - compare the real defects found). Then give an overall trustRecommendation (TRUST / TRUST_WITH_CONDITIONS / DO_NOT_TRUST_YET) for whether this CT-OS pipeline, run for real via Gemini-preferred/Claude-fallback (later Claude-only) providers, could be trusted on a third, unseen client site, with explicit conditions. Also note in overallFindings any real infrastructure/provider-reliability observations from running this benchmark: Gemini hit a real HTTP 429 daily quota exhaustion partway through and never recovered for the rest of the session; Claude (claude-sonnet-5) then carried the entire remainder of both pipelines; Claude's forced tool-use output was observed to occasionally emit malformed XML-style <parameter> tags inside string fields on the first attempt for two different jobs, resolved by an explicit anti-XML instruction and/or retry; Claude's default output-token cap (originally 4096, hardcoded in the adapter with no env override) was too small for larger schemas and had to be raised. IMPORTANT OUTPUT FORMAT NOTE: return each field as plain JSON values directly as the tool-call argument. Do not emit any XML-style <parameter name=...> tags anywhere in your output, including inside string or array values.",
+  "inputArtifacts": [
+    {
+      "id": "art_bench_uproof_report",
+      "type": "agent_benchmark_report",
+      "version": 1,
+      "title": "U-Proof KNOWN Benchmark Report",
+      "summary": null,
+      "content": {
+        "businessUnderstanding": "The pipeline correctly understood that U-Proof is a South African waterproofing/building-products manufacturer (owner Martin) whose WooCommerce ecommerce site is being rebuilt/completed by Creative Touch after a prior developer relationship ended without handover. It correctly captured that the client likes the existing design and wants completion/improvement rather than a redesign, that real VAT-inclusive ZAR retail pricing was supplied and must be used exactly (Liquid Rubber, Fibre Filler, Wall & Roof Paint, Zinc Phosphate Primer, Bonding Liquid Primer, Plaster Primer, Membrane), and that the client wants live Fastway Courier shipping rates plus Payflex BNPL/card payment rather than manual EFT or flat-rate shipping as the primary checkout path. It also correctly treated this as a non-blind run, cross-referencing Creative Touch's own prior 2026-09-02 technical audit rather than starting fresh.",
+        "audienceInferred": [
+          "South African contractors purchasing waterproofing materials for commercial/residential jobs",
+          "DIY homebuilders sealing roofs, walls, foundations and cracks",
+          "Architects/specifiers needing technical validation before specifying products",
+          "Trade buyers seeking bulk/technical pricing via phone contact"
+        ],
+        "conversionModelInferred": "Primary model is direct ecommerce purchase through WooCommerce: browse by category or application use-case -> view accurate size/variant pricing (5L/20L, membrane widths) -> add to cart -> checkout with live Fastway Courier shipping rate calculation -> pay via Paystack card or Payflex BNPL (explicitly avoiding EFT/manual/COD as primary). A secondary, lower-volume conversion path is trade/technical lead generation via phone or contact form for architects and bulk buyers.",
+        "siteStrengths": [
+          {
+            "id": "pricing-structure-built",
+            "finding": "Real Size and Size x Color variation structures with correct client pricing have been built for several product lines.",
+            "evidence": "PROJECT FACTS prior audit: 'real Size and Size x Color variation structures were built and verified for Liquid Rubber, Fibre Filler, Wall & Roof Paint and Membrane with real pricing.'",
+            "confidence": 0.7
+          },
+          {
+            "id": "security-hardening-applied",
+            "finding": "Security hardening (headers, version-disclosure removal, exposed backup file removal) was previously applied.",
+            "evidence": "PROJECT FACTS prior 2026-09-02 audit history.",
+            "confidence": 0.7
+          },
+          {
+            "id": "content-pack-discipline",
+            "finding": "Stage 4 content_pack explicitly avoids inventing prices/pages and flags the shop-catalog rendering issue as unverified rather than claiming it fixed at the summary level.",
+            "evidence": "content_pack v1 summary: 'explicitly notes in its own content that only one category was confirmed rendering live in research and that this should be verified before publishing.'",
+            "confidence": 0.75
+          },
+          {
+            "id": "build-plan-scope-discipline",
+            "finding": "build_plan correctly excludes RED-tier actions (DNS, payment credentials, shipping) from build scope, listing them only as risks per doctrine.",
+            "evidence": "build_plan v1 summary: 'RED-tier items (shipping, payment credentials, DNS) are explicitly excluded from build scope and listed only as risks/open questions.'",
+            "confidence": 0.8
+          },
+          {
+            "id": "valid-primary-phone",
+            "finding": "A valid-format primary contact phone number exists alongside the placeholder number.",
+            "evidence": "research_report existingSiteFindings: 'Includes a valid-format primary phone (+27 11 450 1234) alongside a placeholder number.'",
+            "confidence": 0.75
+          },
+          {
+            "id": "real-articles-drafted",
+            "finding": "Stage 4 replaced the three fake AI placeholder Help & Advice teasers with real, substantive drafted articles.",
+            "evidence": "content_pack v1 summary: 'this pass writes them as real, commissioned, substantive articles with genuine step-by-step content, closing that specific gap.'",
+            "confidence": 0.65
+          }
+        ],
+        "uxWeaknesses": [
+          {
+            "id": "shop-catalog-broken",
+            "finding": "Shop page shows 5 category tabs but only renders 1 product live, breaking the core browse/purchase journey.",
+            "evidence": "research_report: '/shop page shows 5 category tabs, but only one single product (Liquid Rubber at R790) is rendered on the page.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "placeholder-hash-links",
+            "finding": "Homepage Application 'Read more' and featured product links use placeholder '#' anchors, breaking the problem-led contractor journey.",
+            "evidence": "research_report existingSiteFindings: 'Multiple homepage Application Read more links and featured product actions use placeholder fragment anchors (#).'",
+            "confidence": 0.8
+          },
+          {
+            "id": "address-discrepancy-checkout-risk",
+            "finding": "Contact page business address (Vereeniging) conflicts with WooCommerce shipping-origin address (Edenvale), risking checkout/shipping confusion.",
+            "evidence": "research_report: Contact page 'Shop 5, Vision 21 Industrial Park... Vereeniging' vs prior audit-set WooCommerce origin 'Unit 4, Gateway Industrial Park... Edenvale'; QA defect P1 flags this as unticketed.",
+            "confidence": 0.8
+          },
+          {
+            "id": "placeholder-phone-trust-erosion",
+            "finding": "A placeholder-pattern phone number (+27100000000) remains in the header alongside the real number, undermining trust.",
+            "evidence": "research_report existingSiteFindings + PROJECT FACTS prior audit noted the same pattern.",
+            "confidence": 0.75
+          }
+        ],
+        "visualWeaknesses": [
+          {
+            "id": "no-live-visual-verification",
+            "finding": "The proposed design system palette/typography is a hypothesis with no actual screenshots or renders verified against the live staging site.",
+            "evidence": "design_system v1 direction: 'No actual visual renders, screenshots, or visual color files were provided in this job input... A human designer must visually verify the live staging environment prior to final implementation.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "builder-engine-mismatch",
+            "finding": "Live product metadata shows Elementor 4.2.4 as the builder engine, contradicting the prior audit's recorded 10Web WVC builder, raising uncertainty about which template system actually governs current rendering/visual fidelity.",
+            "evidence": "research_report existingSiteFindings: 'Product metadata reveals Elementor 4.2.4, whereas prior audit recorded 10Web WVC builder engine.'",
+            "confidence": 0.7
+          }
+        ],
+        "seoContentWeaknesses": [
+          {
+            "id": "future-dated-placeholder-blog",
+            "finding": "Homepage 'recent articles' teaser section links to non-existent/placeholder pages with future publication dates and a generic admin author handle, undermining topical/local SEO credibility.",
+            "evidence": "research_report existingSiteFindings: 'placeholder articles with future publication dates (June 26, 2026) and admin author handle ctsa-admin'; PROJECT FACTS: 'fake recent articles teaser section... links to non-existent pages, left from an earlier AI-generated clone.'",
+            "confidence": 0.8
+          },
+          {
+            "id": "homepage-copy-overclaim-inconsistency",
+            "finding": "content_pack's Home page section descriptions assert as accomplished fact ('no unpriced or # cards', all 5 category tiles live) even though the artifact's own summary caveats only the /shop catalog rendering as unverified - an internal consistency defect that could mislead a reader into thinking Home page issues are already fixed.",
+            "evidence": "qa_report Defect 1 (P1): 'content_pack's page-by-page section descriptions... read as accomplished fact in the per-page body even though the summary caveats only the /shop page explicitly.'",
+            "confidence": 0.8
+          },
+          {
+            "id": "featured-price-conflicts",
+            "finding": "Homepage featured product cards show incorrect/missing pricing directly contradicting the client's master price list (Fibre Filler 20L shown at R500 instead of R1590; Bonding Liquid Primer cards show no price).",
+            "evidence": "research_report existingSiteFindings: 'Featured cards for Bonding Liquid Primer... display no price, while Fibre Filler 20L displays R500,00—conflicting directly with the client's master retail price list of R1590,00.'",
+            "confidence": 0.85
+          }
+        ],
+        "technicalFindings": [
+          {
+            "id": "shop-query-restriction",
+            "finding": "The /shop archive loop query is restricted to a single product/category instead of pulling from all 5 active categories.",
+            "evidence": "research_report + site_blueprint conversionLogic: 'Shop Query Repair: Configure the /shop archive loop to query and display products across all 5 active categories rather than restricting output to a single product.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "dns-not-connected",
+            "finding": "The custom domain uproof.co.za is not DNS-connected; the live build sits on a temporary Hostinger staging subdomain.",
+            "evidence": "research_report businessContext: 'Target custom domain: uproof.co.za (currently not DNS-connected; live development sits on hostinger staging teal-sparrow-432062.hostingersite.com).'",
+            "confidence": 0.9
+          },
+          {
+            "id": "payment-shipping-not-configured",
+            "finding": "No shipping zones/methods are configured (only BACS/Cheque/COD enabled) and Paystack/Payflex are installed but never configured with real live credentials.",
+            "evidence": "PROJECT FACTS prior audit: 'no shipping zones/methods configured... only BACS/Cheque/COD enabled, Paystack/Payflex installed but never configured with real credentials.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "order-email-misconfig-unticketed",
+            "finding": "Order-notification emails go to Creative Touch's own address instead of the client's business inbox, and the outgoing from-address uses a leftover third-party domain; this remains unresolved and has no visible build_plan ticket.",
+            "evidence": "PROJECT FACTS: 'order-notification emails were going to Creative Touch's own address... both flagged, not resolved.' qa_report Defect 3 (P1) confirms no ticket addresses this.",
+            "confidence": 0.75
+          },
+          {
+            "id": "10web-asset-hardcoding-unverified",
+            "finding": "Prior hardcoded 10Web trial-domain assets (logo/breadcrumb/footer/payment icons) were stripped from on-disk build files but not independently re-verified live since, and no fresh live re-check or ticket exists for this.",
+            "evidence": "PROJECT FACTS: 'confirmed live and customer-facing as of 2026-09-02, then stripped... not independently re-verified live since.' qa_report Defect 4 (P1) confirms coverage gap.",
+            "confidence": 0.75
+          },
+          {
+            "id": "builder-engine-discrepancy-unticketed",
+            "finding": "The Elementor 4.2.4 vs previously-recorded 10Web WVC builder engine discrepancy is acknowledged in research but has no follow-up verification ticket in the visible build_plan.",
+            "evidence": "qa_report Defect 6: 'research_report itself surfaces a new/unresolved technical claim... acknowledged but not turned into any follow-up verification ticket in the visible build_plan.'",
+            "confidence": 0.7
+          },
+          {
+            "id": "nonjs-fetch-empty-body",
+            "finding": "Non-JS fetches of product detail URLs returned empty body tags, meaning product-page rendering could only be assessed via headless/browser DOM, not confirmed via simple fetch.",
+            "evidence": "research_report existingSiteFindings: 'non-JS fetches returned empty body tags for product detail URLs, requiring headless/browser DOM verification.'",
+            "confidence": 0.7
+          }
+        ],
+        "recommendedImplementationPlan": [
+          {
+            "step": "Re-verify live site state fresh (shop catalog rendering, featured pricing, address, hash-links, 10Web asset stripping, builder engine identity) before treating any Stage 1-5 finding as still accurate, per PROJECT FACTS' own warning that several items already appear changed.",
+            "rationale": "Multiple stages explicitly caveat that prior audit findings and even this research pass's own findings may already be stale; QA flags several unticketed items that must be confirmed rather than assumed resolved or dropped.",
+            "priority": "P0"
+          },
+          {
+            "step": "Execute build_plan ticket 'Shop-Catalog Query Fix - Restore All 5 Categories to /shop Archive Loop' and require live re-verification before marking resolved.",
+            "rationale": "Root-cause fix for the single-highest-impact conversion blocker (only 1 of 5 categories rendering); ticket already explicitly requires fresh re-check rather than assumption.",
+            "priority": "P0"
+          },
+          {
+            "step": "Execute build_plan ticket for Home Page Rebuild to correct featured-card pricing (Fibre Filler 20L to R1590, Bonding Liquid Primer prices populated) using PROJECT FACTS pricing.",
+            "rationale": "Directly resolves customer-facing pricing conflicts that risk financial loss or customer distrust identified in research_report risks.",
+            "priority": "P0"
+          },
+          {
+            "step": "Revise content_pack Home-page section copy so per-page descriptions match the artifact's own summary-level caveat about unverified catalog state (do not assert '5-category tiles' or 'no unpriced cards' as accomplished fact).",
+            "rationale": "QA Defect 1 (P1): internal inconsistency between content_pack's honest summary and overconfident page-level copy could mislead a reviewer into approving unverified claims.",
+            "priority": "P1"
+          },
+          {
+            "step": "Open new build_plan tickets for: (a) Contact-page vs WooCommerce shipping-origin address reconciliation, (b) order-notification email/from-address remediation, (c) 10Web trial-domain asset re-verification, (d) future-dated placeholder blog/author cleanup beyond the 3 named articles, (e) Elementor-vs-10Web builder engine discrepancy verification.",
+            "rationale": "QA Defects 2-6 (P1/P2) found these PROJECT FACTS/research-flagged issues have no visible ticket coverage in build_plan; doctrine requires QA at zero P0/P1 before advancement, and these gaps must be closed or explicitly confirmed as already covered.",
+            "priority": "P1"
+          },
+          {
+            "step": "Execute build_plan ticket 'Header Topbar Rebuild' to remove the placeholder phone number (+27100000000), retaining only the verified number.",
+            "rationale": "Low-effort trust fix already scoped as an AMBER ticket in build_plan.",
+            "priority": "P1"
+          },
+          {
+            "step": "Route design_system through explicit human visual sign-off against the live staging environment before CONTROLLED ACTIVATION TESTING, given the stated lack of real screenshots/renders in this pass.",
+            "rationale": "design_system's own vision-limitation disclaimer and QA's confirmation that this is correctly not overridden by build_plan; visual fidelity to the client's liked existing design has not been verified.",
+            "priority": "P1"
+          },
+          {
+            "step": "Human decision required before any RED-tier action: obtain and configure live Fastway Courier shipping credentials and Paystack/Payflex live payment credentials, and perform the DNS cutover to uproof.co.za.",
+            "rationale": "These are RED-tier per doctrine (shipping/payment credentials, DNS) and explicitly excluded from agent build scope in build_plan; launch cannot proceed without them per client's stated no-EFT, no-flat-rate requirement.",
+            "priority": "P0"
+          },
+          {
+            "step": "Once build/QA gaps are closed, run FINAL REGRESSION AUDIT and CONTROLLED ACTIVATION TESTING covering full checkout path (category browse -> variant select -> live shipping quote -> live payment) before requesting HUMAN LAUNCH APPROVAL.",
+            "rationale": "Doctrine: launch never auto-approves and requires the full safety pipeline; QA at zero is necessary but not sufficient.",
+            "priority": "P2"
+          }
+        ],
+        "confidenceSummary": [
+          {
+            "findingId": "shop-catalog-broken",
+            "confidence": 0.85,
+            "rationale": "Directly observed via live WebFetch of /shop in research_report, consistent with PROJECT FACTS prior audit context and reiterated across site_blueprint and content_pack."
+          },
+          {
+            "findingId": "featured-price-conflicts",
+            "confidence": 0.85,
+            "rationale": "Directly observed live pricing on homepage cards, compared against exact PROJECT FACTS retail price list (Fibre Filler 20L = R1590)."
+          },
+          {
+            "findingId": "address-discrepancy-checkout-risk",
+            "confidence": 0.8,
+            "rationale": "Both addresses are independently sourced (live Contact page fetch vs PROJECT FACTS prior audit record of WooCommerce origin setting) and directly conflict."
+          },
+          {
+            "findingId": "dns-not-connected",
+            "confidence": 0.9,
+            "rationale": "Explicitly stated in research_report business context and consistent with staging URL used throughout all fetches."
+          },
+          {
+            "findingId": "payment-shipping-not-configured",
+            "confidence": 0.85,
+            "rationale": "Sourced directly from PROJECT FACTS prior technical audit; not independently re-verified live in this research pass, so treated as carried-forward context rather than fresh confirmation."
+          },
+          {
+            "findingId": "order-email-misconfig-unticketed",
+            "confidence": 0.75,
+            "rationale": "PROJECT FACTS confirms the underlying issue is real and unresolved; QA's claim that build_plan lacks a ticket is based on a truncated artifact, so absence is not fully certain."
+          },
+          {
+            "findingId": "10web-asset-hardcoding-unverified",
+            "confidence": 0.75,
+            "rationale": "PROJECT FACTS explicitly states this was not re-verified live since 2026-09-02; current research pass did not re-check it either, so status is genuinely unknown pending fresh evidence."
+          },
+          {
+            "findingId": "homepage-copy-overclaim-inconsistency",
+            "confidence": 0.8,
+            "rationale": "Directly identified by independent Stage 6 QA auditor comparing content_pack's own summary language against its page-section body text."
+          },
+          {
+            "findingId": "no-live-visual-verification",
+            "confidence": 0.9,
+            "rationale": "design_system explicitly self-discloses this limitation; not an inferred finding but a stated fact in the artifact."
+          }
+        ],
+        "unsupportedAssumptionsRejected": [
+          "QA rejected the assumption that content_pack's Home-page copy could be treated as reflecting an accomplished/fixed state (all 5 category tiles live, no unpriced cards) - the artifact's own summary only caveats the /shop page as unverified, creating an internal inconsistency QA flagged as needing author revision rather than accepting at face value.",
+          "QA rejected the assumption that build_plan's ticket set fully covers all research_report/PROJECT FACTS-flagged issues - it explicitly declined to assume the address mismatch, order-email misconfiguration, 10Web asset re-verification, and future-dated blog cleanup are ticketed elsewhere in the truncated document, insisting this be confirmed with the human reviewer rather than assumed present.",
+          "QA rejected treating the design_system's proposed palette/typography as visually validated - it endorsed the artifact's own disclaimer rather than accepting the hypothesis as final, requiring explicit human visual sign-off before activation testing.",
+          "QA rejected the idea that the Elementor 4.2.4 vs prior-recorded 10Web WVC builder engine discrepancy could be left as a passively 'acknowledged' fact - it flagged the absence of any follow-up verification ticket as a genuine coverage gap rather than an accepted resolution."
+        ],
+        "humanReviewQuestions": [
+          "Which physical business address is correct and current - the Contact page's Vereeniging address or the WooCommerce shipping-origin Edenvale address set in the prior audit - and which should be used going forward?",
+          "Has the shop-catalog query issue (only 1 of 5 categories rendering) actually been fixed since the 2026-09-09 research fetch, or does it remain live?",
+          "Are live credentials for Fastway Couriers, Paystack, and Payflex now available, and who is authorized to enter them (RED-tier action requiring named human authorization)?",
+          "Has the order-notification email misconfiguration (wrong recipient, leftover third-party from-address) been corrected, and what should the correct client inbox and from-address be?",
+          "Is the 10Web trial-domain asset hardcoding (allowed-pony.10web.cloud) still present live, given it was only confirmed stripped from on-disk files and not re-verified live?",
+          "Is the site currently running on Elementor or the previously-recorded 10Web WVC builder - which is authoritative, and does this affect any other build_plan assumptions?",
+          "Does the full build_plan ticket set (only partially visible due to truncation) actually include tickets for the address mismatch, email misconfiguration, 10Web asset check, and blog placeholder cleanup, or must new tickets be authored?",
+          "When is DNS cutover to uproof.co.za planned, and what is the go/no-go gate for that RED-tier action relative to QA/launch approval?",
+          "Should the future-dated placeholder blog posts and 'ctsa-admin' author handle be deleted, unpublished, or reauthored, and by whom?",
+          "Is Martin (the client) available to visually sign off on the proposed design_system palette/typography against the live staging site before further build work proceeds, given no real screenshots were used to derive it?"
+        ],
+        "evidenceLog": [
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/",
+            "note": "Live home page scan (fetched 2026-09-09) - used in research_report"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/shop",
+            "note": "Live shop page scan (fetched 2026-09-09) - confirmed only 1 product rendering"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/contact",
+            "note": "Live contact page scan (fetched 2026-09-09) - Vereeniging address found"
+          },
+          {
+            "ref": "https://teal-sparrow-432062.hostingersite.com/product/liquid-rubber-5l-premium-waterproof-sealant/",
+            "note": "Live product page fetch attempt (fetched 2026-09-09) - empty body tag, non-JS limitation"
+          },
+          {
+            "ref": "PROJECT_FACTS_2026_09_02_AUDIT",
+            "note": "Creative Touch's own prior technical audit: shipping/payment gateway state, address setting, order-email misconfiguration, 10Web asset hardcoding, security hardening, variation structures built"
+          },
+          {
+            "ref": "PROJECT_FACTS_pricing_schedule",
+            "note": "Client-supplied real VAT-inclusive ZAR retail pricing used to validate/correct all pricing claims across site_blueprint, design_system references, content_pack, and build_plan"
+          },
+          {
+            "ref": "PROJECT_FACTS_business_context",
+            "note": "Client identity (Martin/U-Proof), prior developer handover failure, design-retention preference, Fastway/Payflex/no-EFT requirement"
+          }
+        ],
+        "knownContextUsed": [
+          "U-Proof real product pricing sheet (PROJECT FACTS) - used to validate/correct featured-card and category pricing across research, blueprint, content, and build stages",
+          "U-Proof prior Creative Touch audit history as of 2026-09-02 (PROJECT FACTS) - used for shipping/payment gateway state, WooCommerce shipping-origin address, order-notification email misconfiguration, 10Web trial-domain asset finding, security hardening record, and prior variation-structure build status",
+          "U-Proof business context (PROJECT FACTS) - client identity (Martin), prior developer handover failure, preference to retain existing design, and requirement for live Fastway courier rates plus Payflex/card payment over EFT"
+        ]
+      }
+    },
+    {
+      "id": "art_bench_imvusa_report",
+      "type": "blind_benchmark_report",
+      "version": 1,
+      "title": "Imvusa BLIND Benchmark Report",
+      "summary": null,
+      "content": {
+        "businessUnderstanding": "The pipeline correctly identified Imvusa Furniture as a real South African custom furniture, reupholstery, and interior services business operating from two physical locations (George and Bloemfontein), not an ecommerce retailer. It recognized that the absence of shop/cart/checkout/pricing pages is appropriate and expected for a custom-quote services business rather than a defect to fix, and it correctly identified the business's fabric supplier partnership (Hertex Fabrics) and named fabric collections (ADORN, CAPPADOCIA, COASTLINES, ESQUIRE) as real content to preserve and correct, not invent.",
+        "audienceInferred": [
+          "Homeowners in George, South Africa seeking custom furniture or reupholstery",
+          "Homeowners in Bloemfontein, South Africa seeking custom furniture or reupholstery",
+          "Interior design-conscious clients wanting curtains, headboards, scatter cushions, wallpaper, or ottomans made to order",
+          "Existing or prospective clients of the Hertex Fabrics partnership choosing fabric collections ahead of a project",
+          "Local/regional customers who prefer to visit or call a physical studio rather than transact online"
+        ],
+        "conversionModelInferred": "Lead-generation / consultation model: the site's core conversion action is a prospective client submitting a quote or consultation request (or calling/visiting a location), not completing an online purchase. The blueprint formalizes this into a single canonical conversion funnel (a dedicated Get a Quote flow) fed from Services, Gallery, and Leather Couches pages, backed by one authoritative Contact Block per location — appropriate for custom, individually-quoted work with no published pricing.",
+        "siteStrengths": [
+          {
+            "id": "strength-service-clarity",
+            "finding": "Homepage hero and service cards clearly communicate the full value proposition and service range with concise descriptions.",
+            "evidence": "Research report: 'Homepage hero and service cards communicate the value proposition and full service list clearly, each with 1-2 sentence descriptions.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "strength-two-locations",
+            "finding": "Site clearly establishes a genuine two-location presence (George and Bloemfontein), which is real, verifiable business structure worth preserving.",
+            "evidence": "Research report business context: 'Two physical locations: George and Bloemfontein.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "strength-no-pricing-appropriate",
+            "finding": "Absence of shop/cart/pricing pages is correctly recognized as appropriate for a custom-quote business model rather than a gap.",
+            "evidence": "Research report: 'No pricing is published anywhere on the site - this is expected and appropriate for a custom-quote service business model, not a defect.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "strength-partner-brand",
+            "finding": "Site names a real fabric supplier partnership and specific named collections, giving concrete, non-generic content to build on.",
+            "evidence": "Research report: 'Site names a fabric supplier partner (Hertex/Hertext Fabrics) and promotes 4 named fabric collections: ADORN, CAPPADOCIA, COASTLINES, ESQUIRE.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "strength-nav-simplicity",
+            "finding": "Existing navigation is simple and shallow, which the blueprint preserves rather than needlessly complicating.",
+            "evidence": "Research report: 'Main nav consists of: Home, Leather Couches, Gallery, Services, Contact Us.'",
+            "confidence": 0.8
+          },
+          {
+            "id": "strength-consistent-secondary-contacts",
+            "finding": "Not all contact data is broken — email addresses and the Bloemfontein phone number are consistent across pages, showing the underlying data isn't wholesale unreliable.",
+            "evidence": "Research report: 'Email addresses ... and Bloemfontein phone (082 824 9790) are consistent between homepage and Contact Us page.'",
+            "confidence": 0.85
+          }
+        ],
+        "uxWeaknesses": [
+          {
+            "id": "ux-no-single-conversion-path",
+            "finding": "Prior to the blueprint's redesign, there was no dedicated, structured quote-request flow — CTAs were generic 'contact us' messaging scattered across pages rather than one funnel.",
+            "evidence": "Site blueprint: replaces 'generic contact us for a quote scattered messaging with one clear funnel' via new /get-a-quote page.",
+            "confidence": 0.75
+          },
+          {
+            "id": "ux-image-only-pages",
+            "finding": "Leather Couches and Gallery pages function as image-only walls with minimal or no supporting text, offering visitors no editorial context, process information, or trust-building narrative.",
+            "evidence": "Research report: Leather Couches has 'minimal extractable text (heading + one sentence)'; Gallery has 'minimal extractable text (heading only)' and 'appears to be a predominantly image-based portfolio.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "ux-no-about-page",
+            "finding": "No About/Our Story page exists in current nav, missing an opportunity to build trust for a relationship-driven, consultation-based business.",
+            "evidence": "Site blueprint: 'About Imvusa' page justified as 'the absence of any about content in the current nav.'",
+            "confidence": 0.75
+          }
+        ],
+        "visualWeaknesses": [
+          {
+            "id": "visual-unverifiable-design",
+            "finding": "No real visual/design review of the current site has occurred — the proposed design system is an unverified hypothesis with no access to actual site photography, logo, or brand assets.",
+            "evidence": "Design system explicit DISCLOSURE: 'I have not seen and cannot see the actual Imvusa site, its leather couch photography, gallery images, or any real brand assets... Everything below is a proposed starting hypothesis.'",
+            "confidence": 0.95
+          },
+          {
+            "id": "visual-image-pages-unassessed",
+            "finding": "Leather Couches and Gallery pages could not be assessed for layout quality, image quality, or embedded text-in-image content via text extraction, leaving visual quality genuinely unknown.",
+            "evidence": "Research report: 'further content, layout quality, or any embedded information in image form could not be assessed via text extraction and requires a real visual/design review.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "visual-proposed-palette-unverified",
+            "finding": "All proposed palette and typography tokens are placeholder hypotheses (e.g. saddle-leather brown, terracotta CTA) not yet checked against any real brand colors or existing materials.",
+            "evidence": "Design system palette entries each marked '(PROPOSED - verify)', e.g. color.brand.primary '#6B3F2A (PROPOSED - verify against real leather/wood tones in photography)'.",
+            "confidence": 0.9
+          }
+        ],
+        "seoContentWeaknesses": [
+          {
+            "id": "seo-duplicated-services-list",
+            "finding": "The Services page contains the entire 8-item services list duplicated back-to-back with identical text, a content-authoring/template error that harms crawl and index clarity.",
+            "evidence": "Research report: 'The Services page contains the entire 8-item services card list duplicated twice in sequence... Content pack notes this was 'actively harming this page's crawl/index clarity.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "seo-brand-spelling-inconsistency",
+            "finding": "The fabric supplier's brand name is spelled inconsistently on the same page ('Hertext Fabrics' in intro copy vs 'Hertex' in the CTA), which is unprofessional and dilutes topical/brand relevance.",
+            "evidence": "Research report: 'the Services page intro copy names the fabric supplier Hertext Fabrics but the same page's closing CTA reads More Fabrics at Hertex.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "seo-thin-image-pages",
+            "finding": "Leather Couches and Gallery pages are thin on indexable text, offering search engines little real content to rank despite being potentially high-intent pages.",
+            "evidence": "Content pack: Leather Couches is 'elevated from a thin, image-only page to a substantive flagship service/editorial page'; Gallery targets 'portfolio/proof-of-work intent' via captioned entries 'instead of an unlabeled image wall.'",
+            "confidence": 0.8
+          },
+          {
+            "id": "seo-nap-inconsistency",
+            "finding": "Inconsistent NAP (Name/Address/Phone) data across pages for two locations undermines local SEO consistency, which search engines weight heavily for multi-location businesses.",
+            "evidence": "Content pack: Contact Us page is positioned as 'the single source of truth for NAP data... this directly resolves the two data mismatches found in research (George phone, Bloemfontein address) and supports local SEO consistency.'",
+            "confidence": 0.85
+          }
+        ],
+        "technicalFindings": [
+          {
+            "id": "tech-george-phone-mismatch",
+            "finding": "George office phone number differs between the homepage (082 468 8898) and the Contact Us page (051 430 9883) — a directly observed, unresolved data conflict.",
+            "evidence": "Research report: 'Homepage lists George office phone as 082 468 8898; Contact Us page lists George office phone as 051 430 9883.'",
+            "confidence": 0.95
+          },
+          {
+            "id": "tech-bloemfontein-address-mismatch",
+            "finding": "Bloemfontein office address differs between the homepage ('15A Kraal Street, Old East End') and Contact Us page ('6 Alpha Straat, Ou Oos Einde') — a directly observed, unresolved data conflict.",
+            "evidence": "Research report: 'Homepage lists Bloemfontein address as 15A Kraal Street, Old East End; Contact Us page lists Bloemfontein address as 6 Alpha Straat, Ou Oos Einde.'",
+            "confidence": 0.95
+          },
+          {
+            "id": "tech-captcha-dropped-from-pipeline",
+            "finding": "An inline image CAPTCHA appearing as extracted plain text on both Home ('select the cup') and Contact Us ('select the heart'), flagged in research as a security/accessibility concern, was never mentioned again in blueprint, design system, content pack, or build plan — it was silently dropped rather than ticketed or explicitly deferred.",
+            "evidence": "QA report defect P1: 'research_report explicitly flags an inline image CAPTCHA... Neither site_blueprint, design_system, content_pack, nor build_plan mention CAPTCHA... it has simply disappeared from the pipeline.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "tech-truncated-artifacts-unverified",
+            "finding": "content_pack and build_plan were only supplied as truncated previews, so QA could not fully verify that no page re-authors contact details outside the canonical Contact Block, or confirm full-document consistency.",
+            "evidence": "QA report defect P1: 'content_pack v1 content field is marked _truncated:true with only a preview string provided; build_plan v1 content field is likewise marked _truncated:true.'",
+            "confidence": 0.85
+          },
+          {
+            "id": "tech-two-amber-blocking-tickets",
+            "finding": "Build plan correctly creates two AMBER-gated, blocked tickets refusing to guess between conflicting George phone numbers and Bloemfontein addresses, rather than silently picking one.",
+            "evidence": "Build plan tickets 'Fix George Phone Number Mismatch' and 'Fix Bloemfontein Address Mismatch', both flagged 'Do not guess or select between the two conflicting... found in research.'",
+            "confidence": 0.9
+          },
+          {
+            "id": "tech-scope-expansion-untraced",
+            "finding": "Blueprint and build plan add net-new pages (Get a Quote, About, Fabrics & Collections, location subpages) beyond the five pages research actually audited, without a visible record of explicit human sign-off treating this as approved scope.",
+            "evidence": "QA report defect P2: 'site_blueprint and build_plan add Get a Quote, About Imvusa, Fabrics & Collections, /contact/george, /contact/bloemfontein as new pages... there is no visible record of human sign-off.'",
+            "confidence": 0.75
+          }
+        ],
+        "recommendedImplementationPlan": [
+          {
+            "step": "Obtain human/client confirmation of the correct George office phone number before entering any value into the canonical Contact Block.",
+            "rationale": "Build plan ticket 'Fix George Phone Number Mismatch — Single Source of Truth' is explicitly blocked pending human confirmation and must not be guessed; this is a P0 QA-flagged launch blocker.",
+            "priority": "P0"
+          },
+          {
+            "step": "Obtain human/client confirmation of the correct Bloemfontein office address before entering any value into the canonical Contact Block.",
+            "rationale": "Build plan ticket 'Fix Bloemfontein Address Mismatch — Single Source of Truth' is explicitly blocked pending human confirmation and must not be guessed; this is a P0 QA-flagged launch blocker.",
+            "priority": "P0"
+          },
+          {
+            "step": "Reintroduce the dropped CAPTCHA/accessibility-security finding as an explicit ticket or documented deferral before proceeding further.",
+            "rationale": "QA defect P1 found this Stage 1 finding was silently dropped from every downstream artifact rather than carried forward or explicitly deferred with rationale.",
+            "priority": "P1"
+          },
+          {
+            "step": "Obtain full (non-truncated) content_pack and build_plan bodies and re-verify that no page re-authors contact details outside the single canonical Contact Block.",
+            "rationale": "QA defect P1: truncated artifacts prevented certifying that the 'one authoritative contact block' claim holds across every page instance.",
+            "priority": "P1"
+          },
+          {
+            "step": "Build the Canonical Contact Block global Elementor template and route Home, Contact Us, and location subpages through it, per build_plan.",
+            "rationale": "This is the structural fix that, once real data is confirmed, permanently eliminates the phone/address mismatch class of defect.",
+            "priority": "P1"
+          },
+          {
+            "step": "Implement the single-authoritative Services list (8 items, no duplication) and standardize fabric supplier spelling to 'Hertex Fabrics' site-wide.",
+            "rationale": "Directly resolves two content-quality/SEO defects found in research and addressed in content_pack and build_plan.",
+            "priority": "P2"
+          },
+          {
+            "step": "Secure explicit human/client sign-off on the net-new page scope (Get a Quote, About, Fabrics & Collections, location subpages) at HUMAN DESIGN APPROVAL rather than treating it as pre-approved.",
+            "rationale": "QA defect P2: scope expansion beyond the five originally audited pages lacks a visible approval trace.",
+            "priority": "P2"
+          },
+          {
+            "step": "Commission a real human visual/design review of the Leather Couches and Gallery pages and of all proposed design_system palette/typography tokens against actual site photography and any existing brand assets.",
+            "rationale": "Design system is explicitly disclosed as an unverified hypothesis with no browsing/image-analysis input; Leather Couches and Gallery could not be assessed via text extraction alone.",
+            "priority": "P2"
+          },
+          {
+            "step": "Proceed through PREVIEW, QA, FINAL REGRESSION AUDIT, and CONTROLLED ACTIVATION TESTING only after the P0 contact-data holds are cleared, then bring to HUMAN LAUNCH APPROVAL as a recorded decision.",
+            "rationale": "Doctrine: launch never auto-approves; QA-clean is necessary but not sufficient, and open holds (contact data) must be a deliberate recorded human decision if launched with them still open.",
+            "priority": "P3"
+          }
+        ],
+        "confidenceSummary": [
+          {
+            "findingId": "tech-george-phone-mismatch",
+            "confidence": 0.95,
+            "rationale": "Directly observed and quoted verbatim from two source pages in research_report; unambiguous factual conflict."
+          },
+          {
+            "findingId": "tech-bloemfontein-address-mismatch",
+            "confidence": 0.95,
+            "rationale": "Directly observed and quoted verbatim from two source pages in research_report; unambiguous factual conflict."
+          },
+          {
+            "findingId": "seo-duplicated-services-list",
+            "confidence": 0.9,
+            "rationale": "Explicitly described as a full back-to-back duplication observed in the actual page content, corroborated by content_pack's remediation."
+          },
+          {
+            "findingId": "seo-brand-spelling-inconsistency",
+            "confidence": 0.9,
+            "rationale": "Two differing spellings quoted directly from the same page in research_report."
+          },
+          {
+            "findingId": "tech-captcha-dropped-from-pipeline",
+            "confidence": 0.9,
+            "rationale": "QA report (Stage 6) independently confirmed this omission by checking all four downstream artifacts."
+          },
+          {
+            "findingId": "tech-truncated-artifacts-unverified",
+            "confidence": 0.85,
+            "rationale": "Explicitly flagged as _truncated:true in the supplied artifacts and independently raised by QA as a verification gap."
+          },
+          {
+            "findingId": "visual-unverifiable-design",
+            "confidence": 0.95,
+            "rationale": "Design system contains an explicit self-disclosed DISCLOSURE block stating no visual input was available."
+          },
+          {
+            "findingId": "tech-scope-expansion-untraced",
+            "confidence": 0.75,
+            "rationale": "QA-flagged as P2 (lower severity) since the expansion is reasoned/justified, but lacks a visible approval record, so treated as moderate confidence."
+          }
+        ],
+        "unsupportedAssumptionsRejected": [
+          "QA rejected the implicit assumption that content_pack and build_plan's claim of 'a single canonical contact block used identically everywhere' could be treated as fully verified — flagged as a material verification gap because both artifacts were only supplied truncated.",
+          "QA rejected the assumption that the CAPTCHA/accessibility-security risk raised in Stage 1 could be considered resolved or safely out of scope simply because later stages did not mention it — treated as a silently dropped issue requiring explicit re-ticketing or documented deferral, not a clean pass.",
+          "QA rejected the assumption that adding net-new pages (Get a Quote, About, Fabrics & Collections, location subpages) beyond the five originally audited pages is automatically approved scope just because it was framed as blueprint-justified — required explicit human sign-off traceability instead.",
+          "QA rejected treating the two AMBER-blocked contact-data tickets as resolved or launch-ready on paper — explicitly reaffirmed these remain a P0 real-world fact gap that cannot be cleared by any pipeline stage without human/client confirmation."
+        ],
+        "humanReviewQuestions": [
+          "Which George office phone number is actually correct: 082 468 8898 (homepage) or 051 430 9883 (Contact Us page) — or is neither current?",
+          "Which Bloemfontein office address is actually correct: '15A Kraal Street, Old East End' (homepage) or '6 Alpha Straat, Ou Oos Einde' (Contact Us page) — or has the office moved and both are stale?",
+          "Is the fabric supplier's correct brand name 'Hertex Fabrics' or 'Hertext Fabrics' — has this been confirmed directly with the supplier/client rather than assumed from majority usage?",
+          "Should the previously flagged inline image CAPTCHA (differing prompts on Home vs Contact Us, appearing as plain extracted text) be investigated now as a security/accessibility issue, or explicitly deferred to a later phase with documented rationale?",
+          "Does the client approve the blueprint's added pages (Get a Quote, About Imvusa, Fabrics & Collections, /contact/george, /contact/bloemfontein) as in-scope, or should the rebuild stay strictly limited to the five originally audited pages?",
+          "Can the client supply the full, non-truncated content_pack and build_plan documents so a complete consistency check can be performed before HUMAN DESIGN APPROVAL?",
+          "Are there any existing brand guidelines, logo files, or real site photography available so the proposed (currently unverified) design_system palette and typography can be checked against actual brand assets rather than treated as a blind hypothesis?"
+        ],
+        "evidenceLog": [
+          {
+            "ref": "https://imvusa.net/",
+            "note": "Homepage - source of hero/value proposition copy, first instance of George phone number and Bloemfontein address, and the 'select the cup' CAPTCHA text."
+          },
+          {
+            "ref": "https://imvusa.net/services",
+            "note": "Services page - source of the duplicated 8-item services list and the Hertext/Hertex spelling inconsistency."
+          },
+          {
+            "ref": "https://imvusa.net/leather-couches",
+            "note": "Leather Couches page - predominantly image-based with minimal extractable text; flagged for required visual/design review."
+          },
+          {
+            "ref": "https://imvusa.net/gallery",
+            "note": "Gallery page - predominantly image-based portfolio with heading-only extractable text; flagged for required visual/design review."
+          },
+          {
+            "ref": "https://imvusa.net/contact-us",
+            "note": "Contact Us page - source of second, conflicting George phone number, conflicting Bloemfontein address, and the 'select the heart' CAPTCHA text."
+          }
+        ]
+      }
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "kn_doctrine_pipeline",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Every build passes through the safety pipeline",
+      "content": "BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE. No stage may be skipped by an agent.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine SAFETY_PIPELINE"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_permissions",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "GREEN / AMBER / RED permission tiers",
+      "content": "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine PERMISSION_MODEL"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_launch",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Launch never auto-approves",
+      "content": "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "appr_up_launch"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_learning",
+      "scope": "DOCTRINE",
+      "category": "process",
+      "title": "Agents propose; humans approve knowledge",
+      "content": "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "CTOS-001 Part F"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_pricing",
+      "scope": "PROJECT",
+      "category": "content",
+      "title": "U-Proof real product pricing",
+      "content": "Real current retail pricing supplied by the client (Martin), VAT-inclusive ZAR, as recorded by Creative Touch and applied to the store's product data:\nLiquid Rubber: 5L=R790, 20L=R1790.\nFibre Filler: 5L=R790, 20L=R1590.\nWall & Roof Paint: 5L=R600, 20L=R1290.\nZinc Phosphate Primer: 5L=R700, 20L=R1500.\nBonding Liquid Primer: 5L=R500, 20L=R1500.\nPlaster Primer: 5L=R500, 20L=R1000.\nMembrane: 100mm x 50m=R199, 200mm x 50m=R299, 300mm x 50m=R399, 500mm x 50m=R499, 1m x 50m=R999.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client-supplied price list"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_audit_history",
+      "scope": "PROJECT",
+      "category": "qa",
+      "title": "U-Proof prior Creative Touch audit history (as of 2026-09-02)",
+      "content": "Creative Touch's own prior hands-on technical audit history for this project (most recent pass 2026-09-02): no shipping zones/methods configured (test order confirmed silent no-shipping checkout, since deleted); only BACS/Cheque/COD enabled, Paystack/Payflex installed but never configured with real credentials; compiled Shop/Product/Cart/Checkout build files were found hardcoding a third-party 10Web trial domain (allowed-pony.10web.cloud) for logo/breadcrumb/footer/payment-icon assets, confirmed live and customer-facing as of 2026-09-02, then stripped from on-disk build files in a housekeeping pass (not independently re-verified live since); a fake 'recent articles' teaser section (FAQs, How to Apply Liquid Rubber, Surface Preparation Guide) on the homepage links to non-existent pages, left from an earlier AI-generated clone; real broken homepage CTA links were found and fixed; a placeholder-style phone number pattern (+27100000000) was noted; WooCommerce shipping-origin address was corrected to match the Contact page's address at the time (Unit 4, Gateway Industrial Park, Sebenza, Edenvale, Johannesburg); order-notification emails were going to Creative Touch's own address rather than the client's business inbox, and the outgoing from-address was a leftover third-party domain - both flagged, not resolved; security hardening was applied (headers, stripped version-disclosure tags, removed exposed backup files); real Size and Size x Color variation structures were built and verified for Liquid Rubber, Fibre Filler, Wall & Roof Paint and Membrane with real pricing. None of this should be assumed still accurate without checking fresh evidence - several items already appear to have changed.",
+      "status": "APPROVED",
+      "confidence": 0.9,
+      "evidence": [
+        "CT internal audit rounds 1-3, 2026-08-31 to 2026-09-02"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_up_business",
+      "scope": "PROJECT",
+      "category": "client",
+      "title": "U-Proof business context",
+      "content": "The client (Martin) owns a South African waterproofing/building-products company, U-Proof. Creative Touch is rebuilding/completing the company's ecommerce website on WordPress + WooCommerce after a prior developer relationship broke down without a proper handover. The client likes the existing design and wants it completed and improved, not redesigned. The client does not want manual/flat-rate shipping and prefers live courier rates (Fastway Couriers); Payflex (SA buy-now-pay-later) was under evaluation alongside a standard card gateway, because the client does not want EFT/manual payment as the primary path.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "client intake"
+      ],
+      "projectId": "proj_uproof",
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Richard",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    }
+  ],
+  "requiredOutputSchema": "cross_site_agent_evaluation@1"
+}

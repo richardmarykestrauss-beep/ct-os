@@ -263,6 +263,9 @@ export type ArtifactType =
   | "client_feedback"
   | "deployment_report"
   | "lesson_candidate"
+  | "agent_benchmark_report"
+  | "blind_benchmark_report"
+  | "cross_site_agent_evaluation"
   | "other";
 
 export type ArtifactStatus = "DRAFT" | "FINAL" | "SUPERSEDED" | "REJECTED";

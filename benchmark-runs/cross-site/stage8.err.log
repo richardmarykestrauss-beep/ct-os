@@ -1,0 +1,1 @@
+[run-benchmark] FAILED: No provider could execute job bench_1788963568899: claude (failed_validation: Output failed cross_site_agent_evaluation@1 validation: trustRecommendation: Invalid input: expected object, received undefined)

@@ -1,0 +1,339 @@
+{
+  "runLabel": "IMVUSA (blind) - Stage 3/7 - Agent 03 Creative Director",
+  "agent": {
+    "code": "A03",
+    "shortCode": "03",
+    "name": "Creative Director",
+    "role": "Visual direction and design system",
+    "requiredCapabilities": [
+      "text",
+      "structured_output",
+      "vision"
+    ],
+    "permissionLevel": "AMBER",
+    "defaultPriority": "BALANCED",
+    "responsibilities": [
+      "Visual direction",
+      "Design system tokens",
+      "Component patterns"
+    ]
+  },
+  "taskType": "creative_direction",
+  "instructions": "GENUINELY BLIND RUN - no U-Proof or other client knowledge. You have NO real vision/image input in this run (the real Gemini/Claude adapters used here have no browsing or image-analysis tool) - you must explicitly disclose this limitation at the start of your 'direction' field, exactly as a previous unrelated benchmark run did, and label any palette/typography choice as a proposed starting hypothesis requiring human visual verification against the real site photography (which is central to a furniture/interior brand - do not pretend to have seen the actual leather couch or gallery photos). Base your direction on the craftsmanship/luxury-interior positioning in the research_report and site_blueprint (warm, tactile, upscale-but-approachable furniture brand, two SA regional locations). IMPORTANT OUTPUT FORMAT NOTE: return each field as a plain JSON array of strings/objects directly as the tool-call argument value. Do not emit any XML-style <parameter name=...> tags anywhere in your output, including inside string or array values - output must be pure JSON values with no embedded markup of any kind.",
+  "inputArtifacts": [
+    {
+      "id": "art_bench_im_research",
+      "type": "research_report",
+      "version": 1,
+      "title": "Imvusa Research Report (Stage 1)",
+      "summary": "Imvusa Furniture (imvusa.net) is a South African custom furniture, reupholstery, and interior services business operating from two locations (George and Bloemfontein). It is a lead-generation/consultation business (custom, quoted work) with no ecommerce functionality, which is appropriate for this business model. The site communicates its service range clearly, but our audit found two real, directly-observed data inconsistencies in contact information between the homepage and the Contact Us page (a phone number mismatch for the George office and an address mismatch for the Bloemfontein office), plus two content-quality issues: a fully duplicated services list on the Services page and inconsistent spelling of the fabric supplier's brand name ('Hertext' vs 'Hertex'). Two pages (Leather Couches, Gallery) are predominantly image-based and could not be fully assessed via text extraction alone - a visual/design review is recommended. No competitor research was conducted as part of this job; none should be assumed or fabricated.",
+      "content": {
+        "summary": "Imvusa Furniture (imvusa.net) is a South African custom furniture, reupholstery, and interior services business operating from two locations (George and Bloemfontein). It is a lead-generation/consultation business (custom, quoted work) with no ecommerce functionality, which is appropriate for this business model. The site communicates its service range clearly, but our audit found two real, directly-observed data inconsistencies in contact information between the homepage and the Contact Us page (a phone number mismatch for the George office and an address mismatch for the Bloemfontein office), plus two content-quality issues: a fully duplicated services list on the Services page and inconsistent spelling of the fabric supplier's brand name ('Hertext' vs 'Hertex'). Two pages (Leather Couches, Gallery) are predominantly image-based and could not be fully assessed via text extraction alone - a visual/design review is recommended. No competitor research was conducted as part of this job; none should be assumed or fabricated.",
+        "businessContext": [
+          "Imvusa Furniture is a custom furniture, repairs, reupholstery, and interior design services business based in South Africa.",
+          "Two physical locations: George and Bloemfontein.",
+          "Business model is lead-generation/consultation-based (custom, quoted work) - no shop, cart, checkout, or product-price pages exist anywhere in site navigation, which is consistent with a custom-quote services business.",
+          "Core services advertised: Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, Ottomans.",
+          "Site names a fabric supplier partner (Hertex/Hertext Fabrics) and promotes 4 named fabric collections: ADORN, CAPPADOCIA, COASTLINES, ESQUIRE.",
+          "No pricing is published anywhere on the site - this is expected and appropriate for a custom-quote service business model, not a defect."
+        ],
+        "existingSiteFindings": [
+          "Main nav consists of: Home, Leather Couches, Gallery, Services, Contact Us.",
+          "Homepage hero and service cards communicate the value proposition and full service list clearly, each with 1-2 sentence descriptions.",
+          "CONTACT MISMATCH #1 (George phone): Homepage lists George office phone as 082 468 8898; Contact Us page lists George office phone as 051 430 9883. These are different numbers for the same office - directly observed discrepancy requiring client clarification before launch.",
+          "CONTACT MISMATCH #2 (Bloemfontein address): Homepage lists Bloemfontein address as '15A Kraal Street, Old East End'; Contact Us page lists Bloemfontein address as '6 Alpha Straat, Ou Oos Einde' - a different street name and number for what should be the same office. Directly observed discrepancy requiring client clarification before launch.",
+          "Email addresses (katelyn@imvusa.net for George, theresa@imvusa.net for Bloemfontein) and Bloemfontein phone (082 824 9790) are consistent between homepage and Contact Us page.",
+          "DUPLICATE CONTENT: The Services page contains the entire 8-item services card list duplicated twice in sequence, back-to-back, with identical text both times - a content-authoring or template error.",
+          "SPELLING INCONSISTENCY: The Services page intro copy names the fabric supplier 'Hertext Fabrics' but the same page's closing CTA reads 'More Fabrics at Hertex' - two different spellings of the same partner brand within a single page.",
+          "Leather Couches page has minimal extractable text (heading + one sentence) and appears to be a predominantly image-based photo gallery; further content, layout quality, or any embedded information in image form could not be assessed via text extraction and requires a real visual/design review.",
+          "Gallery page has minimal extractable text (heading only) and appears to be a predominantly image-based portfolio; same visual-review caveat applies.",
+          "An inline image CAPTCHA challenge appears in the page text content near the contact block on both the homepage ('select the cup') and the Contact Us page ('select the heart') - these differ in prompt between pages, and the presence of CAPTCHA text within extracted page content suggests it may be rendered as accessible/plain text rather than a properly isolated challenge widget, which should be reviewed for both security and accessibility implications.",
+          "No shop, cart, checkout, or product-price pages exist anywhere in the site's navigation, consistent with a consultation/lead-generation business model."
+        ],
+        "competitorInsights": [
+          "No competitor research was conducted as part of this job. No real competitor data was supplied or gathered for this analysis. Per doctrine, no competitor names, positioning claims, or market comparisons should be fabricated or assumed; this should be scoped as a separate, explicit research task if required."
+        ],
+        "risks": [
+          "Contact information inconsistency (George phone number) between homepage and Contact Us page could cause prospective clients to reach a wrong or outdated number, resulting in lost leads - needs client confirmation of the correct current number before any content migration or launch.",
+          "Contact information inconsistency (Bloemfontein address) between homepage and Contact Us page could cause confusion for clients attempting to visit in person, or indicate the business has moved and one page is stale - needs client confirmation of the correct current address before any content migration or launch.",
+          "Duplicated services list on the Services page is a content-quality and possibly SEO/duplicate-content concern that should be corrected during rebuild rather than carried forward as-is.",
+          "Brand name spelling inconsistency ('Hertext' vs 'Hertex') for a named fabric supplier partner could look unprofessional to a partner brand or to visually attentive customers, and should be corrected to the accurate spelling in coordination with the client.",
+          "Leather Couches and Gallery pages being predominantly image-based means text-only audits cannot confirm accessibility (alt text), SEO metadata quality, or whether any pricing/model information is embedded in images - flagged as an open item for the visual/design review stage, not assumed to be a defect.",
+          "Presence of CAPTCHA challenge prompts as extractable plain page text (rather than isolated within a properly rendered/obscured widget) may indicate an accessibility or implementation concern worth a technical review, though this is an observation, not a confirmed defect."
+        ],
+        "recommendations": [
+          "Before any rebuild or content migration, confirm with the Imvusa client (in writing) the single correct, current phone number for the George office and correct any page showing the outdated/incorrect value.",
+          "Before any rebuild or content migration, confirm with the Imvusa client (in writing) the single correct, current physical address for the Bloemfontein office and correct any page showing the outdated/incorrect value.",
+          "Remove the duplicated services card list on the Services page so each service appears once, improving content clarity and avoiding duplicate-content concerns.",
+          "Standardize the fabric supplier's brand name spelling to the partner's actual official spelling (confirm with client or supplier which of 'Hertex' or 'Hertext' is correct) and apply consistently sitewide.",
+          "Schedule a visual/design review of the Leather Couches and Gallery pages specifically, since they are predominantly image-based and could not be fully evaluated via text extraction; confirm image alt text, load performance, and whether any pricing or model info is embedded in images.",
+          "Maintain the current no-pricing approach on the rebuilt site, consistent with the custom-quote business model, unless the client explicitly requests a shift toward published starting-price ranges.",
+          "Review the CAPTCHA implementation on the contact-related pages for accessibility and correct rendering behavior as part of the technical/QA stage.",
+          "Scope a dedicated competitor-intelligence task explicitly if competitive positioning research is needed for this project, since none was performed or available for this report."
+        ],
+        "sources": [
+          {
+            "ref": "https://www.imvusa.net/",
+            "note": "Homepage - hero copy, service cards, office contact block (George/Bloemfontein), inline CAPTCHA text. Captured via rendered browser session 2026-09-09."
+          },
+          {
+            "ref": "https://www.imvusa.net/services/",
+            "note": "Services page - duplicated 8-item services list, Hertext/Hertex spelling inconsistency, OUR FABRICS section with 4 named collections. Captured 2026-09-09."
+          },
+          {
+            "ref": "https://www.imvusa.net/leather-couches/",
+            "note": "Leather Couches page - minimal extractable text, predominantly image-based; not fully assessable via text extraction. Captured 2026-09-09."
+          },
+          {
+            "ref": "https://www.imvusa.net/gallery/",
+            "note": "Gallery page - minimal extractable text (heading only), predominantly image-based. Captured 2026-09-09."
+          },
+          {
+            "ref": "https://www.imvusa.net/contact-us/",
+            "note": "Contact Us page - office details differing from homepage (George phone, Bloemfontein address), second CAPTCHA variant. Captured 2026-09-09."
+          }
+        ]
+      }
+    },
+    {
+      "id": "art_bench_im_blueprint",
+      "type": "site_blueprint",
+      "version": 1,
+      "title": "Imvusa Site Blueprint (Stage 2)",
+      "summary": "This blueprint restructures the existing Imvusa Furniture site (Home, Leather Couches, Gallery, Services, Contact Us) around its true business model: a two-location, lead-generation/consultation business for custom furniture, reupholstery and interior services, not an ecommerce store. It keeps the familiar nav but adds justified pages (a proper Get a Quote flow, an About/Our Story page, and location-specific contact detail without duplicating the authoritative contact block), gives Leather Couches and Gallery real editorial content strategies instead of image-only walls, and resolves the two directly-observed data mismatches (George phone, Bloemfontein address) plus the duplicated services list and Hertex/Hertext spelling inconsistency via a single source-of-truth approach. All journeys funnel toward one core conversion action: submitting a quote/consultation request, backed by one canonical, reused contact block.",
+      "content": {
+        "summary": "This blueprint restructures the existing Imvusa Furniture site (Home, Leather Couches, Gallery, Services, Contact Us) around its true business model: a two-location, lead-generation/consultation business for custom furniture, reupholstery and interior services, not an ecommerce store. It keeps the familiar nav but adds justified pages (a proper Get a Quote flow, an About/Our Story page, and location-specific contact detail without duplicating the authoritative contact block), gives Leather Couches and Gallery real editorial content strategies instead of image-only walls, and resolves the two directly-observed data mismatches (George phone, Bloemfontein address) plus the duplicated services list and Hertex/Hertext spelling inconsistency via a single source-of-truth approach. All journeys funnel toward one core conversion action: submitting a quote/consultation request, backed by one canonical, reused contact block.",
+        "sitemap": [
+          {
+            "title": "Home",
+            "path": "/",
+            "purpose": "Introduce Imvusa Furniture's custom furniture, reupholstery and interior services across both locations; communicate value proposition and drive visitors toward requesting a quote or consultation. Displays the single canonical contact block (via shared component), not a locally-authored copy of contact details.",
+            "children": []
+          },
+          {
+            "title": "Services",
+            "path": "/services",
+            "purpose": "Present the full service list (Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, Ottomans) exactly once, each with a clear description and a per-service 'Request a Quote' call to action. Replaces the current page's duplicated card list with a single authoritative listing, and standardizes the fabric supplier name as 'Hertex Fabrics' throughout.",
+            "children": [
+              {
+                "title": "Furniture Repairs",
+                "path": "/services/furniture-repairs"
+              },
+              {
+                "title": "Reupholstery",
+                "path": "/services/reupholstery"
+              },
+              {
+                "title": "Custom Curtains",
+                "path": "/services/custom-curtains"
+              },
+              {
+                "title": "Headboards",
+                "path": "/services/headboards"
+              },
+              {
+                "title": "Scatter Cushions",
+                "path": "/services/scatter-cushions"
+              },
+              {
+                "title": "Leather Couches (Service Detail)",
+                "path": "/services/leather-couches"
+              },
+              {
+                "title": "Wallpaper",
+                "path": "/services/wallpaper"
+              },
+              {
+                "title": "Ottomans",
+                "path": "/services/ottomans"
+              }
+            ]
+          },
+          {
+            "title": "Leather Couches",
+            "path": "/leather-couches",
+            "purpose": "Serve as the flagship showcase for leather couch craftsmanship: pairs curated photography with real editorial content - material/leather-grade explainers, the customization process, care guidance, and featured client transformations - so the page informs and builds trust rather than functioning as an image-only gallery, and ends with a clear quote-request call to action.",
+            "children": []
+          },
+          {
+            "title": "Gallery",
+            "path": "/gallery",
+            "purpose": "Showcase completed projects across all service lines (not just leather) organized into filterable categories (Reupholstery, Curtains, Headboards, Cushions, Wallpaper, Ottomans) with short project captions describing the brief, fabric/material used (using standardized 'Hertex Fabrics' naming where relevant), and location (George or Bloemfontein), turning the portfolio into evidence that supports conversion rather than an unlabeled image wall.",
+            "children": []
+          },
+          {
+            "title": "Fabrics & Collections",
+            "path": "/fabrics",
+            "purpose": "Introduce the Hertex Fabrics partnership and the four named collections (ADORN, CAPPADOCIA, COASTLINES, ESQUIRE) with representative imagery and short descriptions, consistently spelled 'Hertex' throughout, giving customers a starting point for fabric selection ahead of a quote consultation.",
+            "children": []
+          },
+          {
+            "title": "About Imvusa",
+            "path": "/about",
+            "purpose": "Build trust by explaining the business's story, craftsmanship approach, and presence in both George and Bloemfontein; reasonable addition justified by the two-location, relationship-driven consultation model and the absence of any 'about' content in the current nav.",
+            "children": []
+          },
+          {
+            "title": "Get a Quote",
+            "path": "/get-a-quote",
+            "purpose": "Dedicated conversion page with a structured quote-request form (service type, location, project description, photo upload, preferred contact method) that serves as the single primary conversion destination linked from every service, gallery, and location page - replacing generic 'contact us for a quote' scattered messaging with one clear funnel.",
+            "children": []
+          },
+          {
+            "title": "Contact Us",
+            "path": "/contact",
+            "purpose": "House the single authoritative contact block - one verified phone number, email, and physical address per location (George and Bloemfontein) - reused as a shared component on Home and any other page that displays contact info, eliminating the previously found phone/address mismatches by having exactly one editable source of truth.",
+            "children": [
+              {
+                "title": "George Office",
+                "path": "/contact/george"
+              },
+              {
+                "title": "Bloemfontein Office",
+                "path": "/contact/bloemfontein"
+              }
+            ]
+          }
+        ],
+        "journeys": [
+          {
+            "name": "New Prospect Requests a Custom Furniture Quote",
+            "steps": [
+              "Land on Home via search/referral and read value proposition",
+              "Browse Services to identify the relevant service (e.g. Reupholstery)",
+              "View Gallery or Leather Couches page for proof of quality and relevant past work",
+              "Click 'Request a Quote' CTA leading to /get-a-quote",
+              "Complete quote form with service type, location, project details and optional photos",
+              "Receive confirmation message and expect follow-up from correct George or Bloemfontein contact"
+            ],
+            "conversionGoal": "Submitted quote/consultation request form"
+          },
+          {
+            "name": "Existing-Relationship Client Chooses Fabric Then Books Consultation",
+            "steps": [
+              "Arrive via direct link or repeat visit to /fabrics",
+              "Review Hertex Fabrics collections (ADORN, CAPPADOCIA, COASTLINES, ESQUIRE)",
+              "Navigate to Services page to confirm reupholstery/curtain service scope",
+              "Click through to /get-a-quote referencing chosen fabric collection",
+              "Submit quote form"
+            ],
+            "conversionGoal": "Submitted quote/consultation request referencing a specific fabric collection"
+          },
+          {
+            "name": "Local Customer Wants to Visit or Call a Specific Office",
+            "steps": [
+              "Land on Contact Us page (or click location-specific link from Home)",
+              "Select George Office or Bloemfontein Office tab",
+              "View single authoritative address, phone, and email for that location",
+              "Call the listed number or use the on-page quote CTA as an alternative to visiting"
+            ],
+            "conversionGoal": "Phone call placed or quote form submitted using correct, verified location contact details"
+          }
+        ],
+        "conversionLogic": [
+          "Establish one canonical, single-source-of-truth contact data block (per location: George and Bloemfontein) maintained centrally - e.g. as a shared content component or CMS global - and reused via reference on Home, Contact Us, and any footer, rather than being separately authored/typed on each page; this structurally prevents the kind of phone-number and address drift found between the current Homepage and Contact Us page.",
+          "Before migrating any contact content, the client must confirm the single correct George office phone number (choose between 082 468 8898 and 051 430 9883) and the single correct Bloemfontein address (choose between '15A Kraal Street, Old East End' and '6 Alpha Straat, Ou Oos Einde'); do not guess or average these - treat as an open question blocking content freeze.",
+          "Rebuild the Services page from a single structured list of the 8 services (Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, Ottomans) rendered once via a repeatable card component, eliminating the previously found duplicated back-to-back listing at both the content and template level so it cannot recur on future edits.",
+          "Standardize the fabric supplier brand name to the single correct spelling 'Hertex Fabrics' sitewide (Services intro copy, Services CTA, new Fabrics & Collections page, Gallery captions) and remove the incorrect 'Hertext' variant everywhere it appears; confirm the correct spelling directly with the client/supplier before final copy lock.",
+          "Give Leather Couches and Gallery genuine content strategies beyond image walls: Leather Couches gains explainer copy on leather grades/materials, the customization process, care tips, and featured transformation stories; Gallery gains category filters, short per-project captions (brief, materials used, location) and alt text for every image - both ending in a consistent quote-request CTA rather than relying on photography alone to convert.",
+          "Every service description, gallery project caption, and the Leather Couches/Fabrics pages should end in a consistent, single-style CTA ('Request a Quote' / 'Book a Consultation') that routes to the dedicated /get-a-quote page rather than scattering multiple inconsistent contact-prompt styles across pages.",
+          "Replace the current inline, plain-text-rendered CAPTCHA challenge (found differing between 'select the cup' on Home and 'select the heart' on Contact Us) with a single standardized, properly isolated CAPTCHA/spam-protection widget used consistently on the one quote form and one contact form, flagged separately as an AMBER security/accessibility fix requiring human review before implementation since it touches form security tooling.",
+          "No pricing, cart, or checkout logic should be introduced anywhere in the site; all conversion paths terminate in a quote/consultation request or a direct phone/email contact action, consistent with the custom-quote service business model."
+        ],
+        "openQuestions": [
+          "What is the correct, current George office phone number: 082 468 8898 or 051 430 9883?",
+          "What is the correct, current Bloemfontein office address: '15A Kraal Street, Old East End' or '6 Alpha Straat, Ou Oos Einde' - or has the office actually relocated, making both historically accurate at different times?",
+          "What is the correct spelling of the fabric supplier brand - 'Hertex' or 'Hertext' - and should this be confirmed directly with the supplier/partner?",
+          "Should the Leather Couches page remain a standalone top-level nav item, or be folded fully into Services as a sub-page now that Services also lists Leather Couches as one of its 8 services (potential nav redundancy to resolve with the client)?",
+          "Is a visual/design review of the existing Leather Couches and Gallery image assets scheduled, since text extraction could not assess layout quality, alt text presence, or any pricing/text embedded within images?",
+          "Does the business want a single combined 'Get a Quote' form for all services and both locations, or separate forms/routing per location or per service line?",
+          "Should the inline CAPTCHA text discrepancy ('select the cup' vs 'select the heart') be treated as a security/accessibility fix within this UX job, or escalated as a separate technical/AMBER-tier ticket outside IA scope?",
+          "Are there any additional locations, service lines, or partner brands beyond what is documented in the research report that should be reflected in the sitemap?"
+        ]
+      }
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "kn_doctrine_pipeline",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Every build passes through the safety pipeline",
+      "content": "BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE. No stage may be skipped by an agent.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine SAFETY_PIPELINE"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_permissions",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "GREEN / AMBER / RED permission tiers",
+      "content": "GREEN actions run automatically. AMBER actions require explicit human approval before execution. RED actions (DNS, registrar, payment credentials, destructive infrastructure) are never executed by an agent without explicit, named authorization.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "state-machine PERMISSION_MODEL"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_launch",
+      "scope": "DOCTRINE",
+      "category": "safety",
+      "title": "Launch never auto-approves",
+      "content": "QA at zero is necessary, never sufficient, for launch. Launch requires human approval; approving with open launch holds is a deliberate, recorded human decision.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "appr_up_launch"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "kn_doctrine_learning",
+      "scope": "DOCTRINE",
+      "category": "process",
+      "title": "Agents propose; humans approve knowledge",
+      "content": "Agents may propose lesson candidates. No agent may promote its own output into AGENCY or DOCTRINE knowledge. Human approval is the only path from CANDIDATE to APPROVED.",
+      "status": "APPROVED",
+      "confidence": 1,
+      "evidence": [
+        "CTOS-001 Part F"
+      ],
+      "projectId": null,
+      "jobId": null,
+      "proposedByAgentId": null,
+      "reviewedBy": "Production Lead",
+      "reviewedById": null,
+      "reviewedAt": null,
+      "createdAt": null,
+      "updatedAt": null
+    }
+  ],
+  "requiredOutputSchema": "design_system@1"
+}

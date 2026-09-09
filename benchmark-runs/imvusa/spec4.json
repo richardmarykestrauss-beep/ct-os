@@ -1,0 +1,45 @@
+{
+    "runLabel":  "IMVUSA (blind) - Stage 4/7 - Agent 04 SEO \u0026 Content Architect",
+    "agent":  {
+                  "code":  "A04",
+                  "shortCode":  "04",
+                  "name":  "SEO \u0026 Content Architect",
+                  "role":  "Content strategy and search architecture",
+                  "requiredCapabilities":  [
+                                               "text",
+                                               "structured_output",
+                                               "long_context"
+                                           ],
+                  "permissionLevel":  "GREEN",
+                  "defaultPriority":  "BALANCED",
+                  "responsibilities":  [
+                                           "SEO architecture",
+                                           "Page copy",
+                                           "Internal linking"
+                                       ]
+              },
+    "taskType":  "seo_content",
+    "instructions":  "GENUINELY BLIND RUN - no U-Proof or other client knowledge. Write real page copy and SEO architecture for Imvusa Furniture\u0027s actual pages (Home, Services, Leather Couches, Gallery, Contact Us, plus any new pages site_blueprint added) - a custom furniture/reupholstery/interior services business, George and Bloemfontein, lead-generation model (no shop/cart/pricing pages). Use ONE authoritative, corrected contact block (per Stage 2\u0027s conversion logic) rather than perpetuating the phone/address mismatch found in research. Write real substantive copy for Leather Couches and Gallery beyond a single sentence, since research found these pages text-thin. Do not invent services, locations, certifications, or awards not present in research_report/site_blueprint. IMPORTANT OUTPUT FORMAT NOTE: return each field as a plain JSON array of strings/objects directly as the tool-call argument value. Do not emit any XML-style \u003cparameter name=...\u003e tags anywhere in your output, including inside string or array values - output must be pure JSON values with no embedded markup of any kind.",
+    "requiredOutputSchema":  "content_pack@1",
+    "knowledgeFile":  "knowledge.json",
+    "inputs":  [
+                   {
+                       "file":  "stage1-out.json",
+                       "id":  "art_bench_im_research",
+                       "type":  "research_report",
+                       "title":  "Imvusa Research Report (Stage 1)"
+                   },
+                   {
+                       "file":  "stage2-out.json",
+                       "id":  "art_bench_im_blueprint",
+                       "type":  "site_blueprint",
+                       "title":  "Imvusa Site Blueprint (Stage 2)"
+                   },
+                   {
+                       "file":  "stage3-out.json",
+                       "id":  "art_bench_im_design",
+                       "type":  "design_system",
+                       "title":  "Imvusa Design System (Stage 3)"
+                   }
+               ]
+}

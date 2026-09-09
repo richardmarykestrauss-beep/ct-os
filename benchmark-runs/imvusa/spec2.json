@@ -1,0 +1,20 @@
+{
+  "runLabel": "IMVUSA (blind) - Stage 2/7 - Agent 02 UX & Conversion Architect",
+  "agent": {
+    "code": "A02",
+    "shortCode": "02",
+    "name": "UX & Conversion Architect",
+    "role": "Information architecture and conversion design",
+    "requiredCapabilities": ["text", "structured_output"],
+    "permissionLevel": "GREEN",
+    "defaultPriority": "BALANCED",
+    "responsibilities": ["Sitemap design", "Customer journey mapping", "Conversion logic"]
+  },
+  "taskType": "ux_architecture",
+  "instructions": "GENUINELY BLIND RUN - no U-Proof or other client knowledge, only approved doctrine and the supplied research_report. Imvusa Furniture is a lead-generation/consultation business for custom furniture, reupholstery and interior services (George and Bloemfontein), NOT an ecommerce store - do not design a shop/cart/checkout journey, design a quote-request/consultation-booking journey instead. Base the sitemap on the real existing nav (Home, Leather Couches, Gallery, Services, Contact Us) plus reasonable additions the research findings justify. Directly address in your conversionLogic: fixing the George phone number and Bloemfontein address mismatch (pick one authoritative contact block reused everywhere, not duplicated per-page), removing the duplicated services list, standardizing the Hertex spelling, and giving Leather Couches/Gallery a real content strategy beyond just images (since they were found to be image-only pages). IMPORTANT OUTPUT FORMAT NOTE: return each field as a plain JSON array of strings/objects directly as the tool-call argument value. Do not emit any XML-style <parameter name=...> tags anywhere in your output, including inside string or array values - output must be pure JSON values with no embedded markup of any kind.",
+  "requiredOutputSchema": "site_blueprint@1",
+  "knowledgeFile": "knowledge.json",
+  "inputs": [
+    { "file": "stage1-out.json", "id": "art_bench_im_research", "type": "research_report", "title": "Imvusa Research Report (Stage 1 output)" }
+  ]
+}

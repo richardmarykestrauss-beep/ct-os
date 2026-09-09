@@ -1,0 +1,24 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 6/7 - Agent 06 QA & Launch Auditor",
+  "agent": {
+    "code": "A06",
+    "shortCode": "06",
+    "name": "QA & Launch Auditor",
+    "role": "Independent testing, regression audit, launch readiness",
+    "responsibilities": ["Whole-site QA", "Regression audit", "Launch readiness"],
+    "requiredCapabilities": ["text", "structured_output", "review"],
+    "permissionLevel": "GREEN",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "qa_audit",
+  "instructions": "You are Agent 06, QA & Launch Auditor for U-Proof. You are INDEPENDENT of Agents 01-05 and must actively challenge their prior work, not rubber-stamp it. You have no browsing or vision tool access in this run - review only the structured artifacts supplied (research findings, site blueprint, design system, content pack, build plan). For each of the four prior artifacts: identify anything that looks unverified, internally inconsistent, overconfident, or that silently assumes something was fixed when it was only planned. Specifically check: (1) does content_pack's shop-catalog claim overstate what was actually confirmed live vs. only fixed-in-plan; (2) does build_plan's ticket list actually cover every issue research_report raised, or are any dropped; (3) did design_system's 'no real vision input' limitation get carried forward honestly into what build_plan assumes about visual fidelity; (4) are there any invented facts (pages, prices, credentials, dates) not traceable back to the real evidence in PROJECT knowledge. Produce a qa_report@1: list concrete defects with severity (P0=blocks launch, P1=must-fix before launch, P2=should-fix, P3=minor/cosmetic), and set readyForHumanReview honestly based on what you actually found - do not default to true. This is a review of PLANNING ARTIFACTS ONLY; no live site was tested in this pass, so do not report defects as if they were freshly re-tested against the live site - only flag what the artifacts themselves fail to address or handle inconsistently.",
+  "requiredOutputSchema": "qa_report@1",
+  "knowledgeFile": "knowledge.json",
+  "inputs": [
+    { "file": "stage1-out.json", "id": "art_bench_up_research", "type": "research_report", "title": "U-Proof Research Report (Stage 1 output)" },
+    { "file": "stage2-out.json", "id": "art_bench_up_blueprint", "type": "site_blueprint", "title": "U-Proof Site Blueprint (Stage 2 output)" },
+    { "file": "stage3-out.json", "id": "art_bench_up_design", "type": "design_system", "title": "U-Proof Design System (Stage 3 output)" },
+    { "file": "stage4-out.json", "id": "art_bench_up_content", "type": "content_pack", "title": "U-Proof Content Pack (Stage 4 output)" },
+    { "file": "stage5-out.json", "id": "art_bench_up_buildplan", "type": "build_plan", "title": "U-Proof Build Plan (Stage 5 output)" }
+  ]
+}

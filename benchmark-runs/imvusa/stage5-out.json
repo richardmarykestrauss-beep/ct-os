@@ -1,0 +1,276 @@
+{
+  "ok": true,
+  "runLabel": "IMVUSA (blind) - Stage 5/7 - Agent 05 WordPress/Elementor Builder (READ-ONLY PLAN)",
+  "elapsedMs": 65130,
+  "providerId": "claude",
+  "model": "claude-sonnet-5",
+  "usage": {
+    "inputTokens": 9387,
+    "outputTokens": 6608
+  },
+  "finishReason": "complete",
+  "output": {
+    "summary": "Build plan decomposing the approved Imvusa site_blueprint, design_system, and content_pack into discrete Elementor implementation tickets. Scope covers Home, Services, Leather Couches, Gallery, Contact Us (George/Bloemfontein), Fabrics & Collections, About, and Get a Quote, plus a canonical Contact Block component and global Elementor design system setup. This is a read-only planning pass: no credentials were used, nothing was executed on any live or staging site, and every ticket remains subject to the full BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL -> QA -> FINAL REGRESSION AUDIT -> CONTROLLED ACTIVATION TESTING -> HUMAN LAUNCH APPROVAL -> LIVE pipeline. Nothing is WooCommerce-related as this is a lead-generation/consultation business, not ecommerce. All tickets are GREEN or AMBER; none are RED since no payments, shipping, or DNS/registrar actions exist for this business. Two tickets are explicitly flagged AMBER pending human confirmation of real-world facts this pipeline cannot verify on its own: which George phone number and which Bloemfontein address are actually correct.",
+    "tickets": [
+      {
+        "title": "Global Elementor Design System Setup (Kit/Theme Style)",
+        "objective": "Implement the Imvusa Design System v1 tokens (palette, typography, spacing scale) as Elementor global colors, global fonts, and global spacing in the Site Settings/Theme Style kit, per design_system v1's proposed warm/tactile palette and Fraunces/Inter-style type pairing.",
+        "scope": [
+          "Elementor Site Settings > Global Colors: color.bg.base, color.bg.surface, color.brand.primary, color.brand.secondary, color.accent.warm, color.cta.primary, color.text.primary, color.text.muted, color.border.subtle, color.feedback.success, color.feedback.error",
+          "Elementor Site Settings > Global Fonts: font.display, font.body, font.accent",
+          "Elementor Site Settings > Layout: spacing scale tokens (4px-128px) as custom CSS variables or Elementor spacing presets",
+          "Base button style for CTA using color.cta.primary"
+        ],
+        "doNotChange": [
+          "Do not treat any hex value as final brand color without explicit human visual verification against real site photography/logo, per design_system's own disclosure that all values are PROPOSED and unverified",
+          "Do not touch WooCommerce settings (not applicable to this build)",
+          "Do not modify DNS, hosting, or registrar settings"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Canonical Contact Block Component (Global Widget)",
+        "objective": "Build a single reusable Elementor global widget/template for the canonical Contact Block (phone, email, address per location) as specified in content_pack v1 and design_system v1, to be inserted identically on Home, Contact Us, and any location subpages so there is exactly one editable source of truth.",
+        "scope": [
+          "Create Elementor Global/Saved Template 'Canonical Contact Block' containing George office fields (phone, email, address) and Bloemfontein office fields (phone, email, address)",
+          "Insert this global template on Home (/) canonical contact section",
+          "Insert this global template on Contact Us (/contact) as the primary content",
+          "Insert this global template on /contact/george and /contact/bloemfontein location pages, filtered/scoped to the relevant office"
+        ],
+        "doNotChange": [
+          "Do not enter final phone/address values until the George phone mismatch and Bloemfontein address mismatch tickets are resolved by the human client — see risks",
+          "Do not create a second, separately-authored contact block anywhere else in the build; every instance must reference this one global template",
+          "Do not fabricate a third location or additional contact methods not present in source research"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Fix George Phone Number Mismatch — Single Source of Truth",
+        "objective": "Resolve the directly-observed George phone number mismatch identified in research by establishing one authoritative George phone number and ensuring it is the only value ever displayed, sourced solely from the canonical Contact Block global template.",
+        "scope": [
+          "Flag this ticket as blocked pending human/client confirmation of which George phone number is actually correct",
+          "Once confirmed, enter the single authoritative George phone number into the Canonical Contact Block global template only",
+          "Audit all pages/templates (Home, Contact, Services, any footer) for any hardcoded/duplicate George phone number and remove/replace with the global block reference"
+        ],
+        "doNotChange": [
+          "Do not guess or select between the two conflicting phone numbers found in research — this ticket cannot be executed until a human confirms the correct number",
+          "Do not publish either candidate number as 'authoritative' without explicit client confirmation",
+          "Do not hardcode the phone number anywhere outside the canonical Contact Block template"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Fix Bloemfontein Address Mismatch — Single Source of Truth",
+        "objective": "Resolve the directly-observed Bloemfontein address mismatch identified in research by establishing one authoritative Bloemfontein address and ensuring it is the only value ever displayed, sourced solely from the canonical Contact Block global template.",
+        "scope": [
+          "Flag this ticket as blocked pending human/client confirmation of which Bloemfontein address is actually correct",
+          "Once confirmed, enter the single authoritative Bloemfontein address into the Canonical Contact Block global template only",
+          "Audit all pages/templates (Home, Contact, Services, any footer, local SEO schema/NAP markup) for any hardcoded/duplicate Bloemfontein address and remove/replace with the global block reference"
+        ],
+        "doNotChange": [
+          "Do not guess or select between the two conflicting addresses found in research — this ticket cannot be executed until a human confirms the correct address",
+          "Do not publish either candidate address as 'authoritative' without explicit client confirmation",
+          "Do not hardcode the address anywhere outside the canonical Contact Block template, including any Local Business schema/JSON-LD"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Services Page — De-duplicate List into Single Authoritative Listing",
+        "objective": "Rebuild /services in Elementor to present the 8 named services (Furniture Repairs, Reupholstery, Custom Curtains, Headboards, Scatter Cushions, Leather Couches, Wallpaper, Ottomans) exactly once each, per content_pack v1 and site_blueprint v1, removing the currently duplicated card list and adding a per-service 'Request a Quote' CTA.",
+        "scope": [
+          "Rebuild /services page layout using the single canonical Service Card component (per design_system v1 components list) for each of the 8 services, no repeats",
+          "Add per-service 'Request a Quote' CTA linking to /get-a-quote (or interim contact CTA if /get-a-quote not yet built)",
+          "Remove any existing duplicate service card instances/sections from the current page",
+          "Apply standardized 'Hertex Fabrics' spelling wherever the fabric supplier is referenced on this page"
+        ],
+        "doNotChange": [
+          "Do not add, remove, or rename any of the 8 named services beyond what is listed in content_pack/blueprint",
+          "Do not invent new service categories, certifications, or awards not present in source research",
+          "Do not duplicate the service card list a second time anywhere on this page"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Standardize 'Hertex Fabrics' Spelling Sitewide",
+        "objective": "Correct every instance of the 'Hertext' misspelling to the standardized 'Hertex Fabrics' naming across all pages per content_pack v1 and site_blueprint v1's Fabrics & Collections page direction.",
+        "scope": [
+          "Audit and correct spelling on Home ('Why Choose Imvusa' section)",
+          "Audit and correct spelling on Services page",
+          "Audit and correct spelling on Gallery page captions",
+          "Audit and correct spelling on Fabrics & Collections page (/fabrics) including ADORN, CAPPADOCIA, COASTLINES, ESQUIRE collection descriptions",
+          "Audit and correct spelling in any Fabric Collection Card component instances"
+        ],
+        "doNotChange": [
+          "Do not alter the four named collection names themselves (ADORN, CAPPADOCIA, COASTLINES, ESQUIRE) — only the supplier name spelling",
+          "Do not invent additional fabric collections or partners not named in source research"
+        ],
+        "permissionLevel": "GREEN"
+      },
+      {
+        "title": "Leather Couches Page — Build Real Editorial Content",
+        "objective": "Rebuild /leather-couches in Elementor as the flagship editorial page per site_blueprint v1 and content_pack v1, replacing the image-only wall with material/leather-grade explainer, customization process steps, care guidance, and featured client transformation content, ending in a quote-request CTA.",
+        "scope": [
+          "Build alternating text/image editorial content blocks (per design_system v1's 'Editorial content block for Leather Couches page' component) for: material/leather-grade explainer, customization process, care guidance, featured transformation",
+          "Insert closing 'Request a Quote' CTA linking to /get-a-quote",
+          "Cross-link from the Services page's Leather Couches entry to this page per SEO architecture notes in content_pack",
+          "Use only copy content supplied in content_pack v1 for this page; do not author new factual claims"
+        ],
+        "doNotChange": [
+          "Do not fabricate leather grades, certifications, process steps, or client transformation details not present in content_pack v1/research_report",
+          "Do not duplicate this content on the Services > Leather Couches service-detail entry beyond a short summary and cross-link"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Gallery Page — Build Real Editorial Content with Categorized Captions",
+        "objective": "Rebuild /gallery in Elementor per site_blueprint v1 and content_pack v1 as a filterable gallery grid organized into categories (Reupholstery, Curtains, Headboards, Cushions, Wallpaper, Ottomans) with short captions describing brief, material (standardized 'Hertex Fabrics' naming), and location (George or Bloemfontein), replacing the unlabeled image wall.",
+        "scope": [
+          "Implement Gallery Grid component with category filter chips per design_system v1 component list",
+          "Add per-project caption fields: brief description, material/fabric used, location (George or Bloemfontein)",
+          "Apply standardized 'Hertex Fabrics' naming in captions where relevant",
+          "Ensure gallery entries only reference project types/categories/locations present in supplied content_pack and research; use placeholder image slots where real photography has not been supplied"
+        ],
+        "doNotChange": [
+          "Do not fabricate project details, client names, locations, or fabric materials not present in content_pack v1/research_report",
+          "Do not include pricing, shop, or cart-style copy per content_pack's explicit exclusion for this lead-gen business"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Home Page Rebuild",
+        "objective": "Rebuild Home (/) per content_pack v1's specified sections: Hero, Our Services Overview, Why Choose Imvusa, Featured Work Teaser, Two Locations One Team, Canonical Contact Block, Closing Call to Action.",
+        "scope": [
+          "Build Hero section with single primary CTA to /get-a-quote or /contact",
+          "Build Our Services Overview section linking to each service anchor/page on /services",
+          "Build Why Choose Imvusa section referencing consultation-led approach and Hertex Fabrics partnership (standardized spelling)",
+          "Build Featured Work Teaser linking to /gallery and /leather-couches",
+          "Build Two Locations, One Team section referencing George and Bloemfontein generically (no specific contact data authored here)",
+          "Insert Canonical Contact Block global template (built in its own ticket) rather than authoring new contact details",
+          "Build Closing Call to Action section"
+        ],
+        "doNotChange": [
+          "Do not author a second, independent version of contact details on this page — must reference the canonical Contact Block global template only",
+          "Do not add ecommerce elements (cart, pricing, checkout)"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Contact Us Page + George/Bloemfontein Location Pages",
+        "objective": "Build /contact as the single source of truth for NAP data using the canonical Contact Block global template, plus /contact/george and /contact/bloemfontein location-specific pages per site_blueprint v1 sitemap.",
+        "scope": [
+          "Build /contact page structure housing the canonical Contact Block global template (built in its own ticket) as primary content for both offices",
+          "Build /contact/george page referencing only the George portion of the canonical Contact Block (no separately authored contact data)",
+          "Build /contact/bloemfontein page referencing only the Bloemfontein portion of the canonical Contact Block (no separately authored contact data)"
+        ],
+        "doNotChange": [
+          "Do not author phone/address/email values directly on these pages — must pull from the canonical Contact Block global template exclusively",
+          "Do not publish until the George phone and Bloemfontein address mismatch tickets are resolved by the client"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Fabrics & Collections Page Build (Blueprint-Added Page)",
+        "objective": "Build the new /fabrics page introducing the Hertex Fabrics partnership and the four named collections (ADORN, CAPPADOCIA, COASTLINES, ESQUIRE) per site_blueprint v1, using the Fabric Collection Card component from design_system v1.",
+        "scope": [
+          "Build page intro section introducing Hertex Fabrics partnership (standardized spelling)",
+          "Build 4x Fabric Collection Card instances for ADORN, CAPPADOCIA, COASTLINES, ESQUIRE with representative image placeholders and short descriptions",
+          "Link page toward /get-a-quote as the conversion step"
+        ],
+        "doNotChange": [
+          "Do not add, rename, or invent additional fabric collections beyond the four named",
+          "Do not include pricing or ordering functionality (no shop/cart)"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "About Imvusa Page Build (Blueprint-Added Page)",
+        "objective": "Build the new /about page per site_blueprint v1, explaining the business's story, craftsmanship approach, and presence in George and Bloemfontein, since no About page copy was included in content_pack v1's explicit page list.",
+        "scope": [
+          "Draft page structure/sections per blueprint intent (story, craftsmanship approach, two-location presence)",
+          "Flag explicitly that no About page copy exists in content_pack v1 — placeholder/lorem structure only until copywriting is supplied and approved separately",
+          "Do not publish real narrative claims (history, founding date, awards) not sourced from research_report"
+        ],
+        "doNotChange": [
+          "Do not invent company history, founding dates, staff bios, certifications, or awards not present in supplied research_report/content_pack",
+          "Do not treat this page as launch-ready without a dedicated content ticket/approval, since it falls outside content_pack v1's named scope"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Get a Quote Page Build (Blueprint-Added Conversion Page)",
+        "objective": "Build the new /get-a-quote page per site_blueprint v1 as the single primary conversion destination, with a multi-step form (service type, location, project description, photo upload, preferred contact method) per design_system v1's component spec.",
+        "scope": [
+          "Build multi-step Elementor form: service type selector, location selector (George/Bloemfontein), project description field, photo upload field, preferred contact method field, progress indicator",
+          "Wire form submission to a placeholder/staging endpoint only — no live email/CRM integration without separate human approval",
+          "Link this page as the CTA target from Services, Gallery, Leather Couches, Fabrics, and Home pages"
+        ],
+        "doNotChange": [
+          "Do not connect the form to live email delivery, CRM, or notification systems without explicit human approval and testing in the QA/regression stages of the pipeline",
+          "Do not include payment or deposit fields — this is a lead-gen consultation request only, not a transaction"
+        ],
+        "permissionLevel": "AMBER"
+      },
+      {
+        "title": "Sitewide Navigation & Internal Linking Update",
+        "objective": "Update the primary Elementor nav menu and footer per design_system v1's component spec to include Home, Leather Couches, Gallery, Services, Fabrics & Collections, About, Contact, with a sticky 'Get a Quote' CTA button, and ensure internal links funnel toward the single conversion action per site_blueprint v1's journey maps.",
+        "scope": [
+          "Update primary nav menu structure/order",
+          "Add sticky 'Get a Quote' CTA button to header per design_system v1",
+          "Update footer to include canonical Contact Block reference, service links, and legal/privacy links placeholder",
+          "Verify internal links across rebuilt pages point to /get-a-quote as the primary conversion target"
+        ],
+        "doNotChange": [
+          "Do not add social links or legal/privacy page content not confirmed/supplied — leave placeholders flagged for human input",
+          "Do not remove any existing nav item without corresponding blueprint justification"
+        ],
+        "permissionLevel": "GREEN"
+      }
+    ],
+    "risks": [
+      "This is a genuinely blind planning pass: no U-Proof, no prior client knowledge, no browsing or image-analysis tool access, and no execution on any live/staging system. Every ticket below is a proposal for human review, not a verified fact.",
+      "The George phone number mismatch cannot be resolved by this pipeline — the plan can only route both candidate values into one editable global template; a human/client must confirm which number is actually correct before either the Contact Block or the Fix-George-Phone ticket can be marked complete.",
+      "The Bloemfontein address mismatch has the same limitation: this plan cannot determine which address is correct, only that there must be exactly one going forward, pending human confirmation.",
+      "design_system v1 explicitly discloses that every color, font, and imagery recommendation is an unverified hypothesis with no access to real site photography, logo, or brand assets — implementing the Global Design System ticket as final without human visual verification would violate the BUILD -> PREVIEW -> HUMAN DESIGN APPROVAL doctrine.",
+      "content_pack v1 does not include copy for the blueprint-added About and Get a Quote pages (it explicitly scoped only Home, Services, Leather Couches, Gallery, Contact Us). Building these pages now risks shipping placeholder/lorem content that must not be mistaken for approved copy.",
+      "No real photography has been supplied for Leather Couches or Gallery pages; editorial content tickets will need placeholder image slots, and launching with placeholders risks looking unfinished if not tracked as an explicit pre-launch QA item.",
+      "Wiring the Get a Quote form to live email/CRM delivery is out of scope for this AMBER planning pass and must go through separate explicit human approval and QA/regression testing before any real lead data flows through it.",
+      "Because this run had no tool access, none of the proposed scope, copy mappings, or component structures have been checked against the actual current live Imvusa site; the 'de-duplication' and 'mismatch fix' tickets are based solely on the research_report/blueprint's description of the problem, not a fresh direct observation.",
+      "No ecommerce/WooCommerce component exists in this plan per task instruction; if the client's real business model includes any transactional element not disclosed in the supplied artifacts, this plan would need to be revised.",
+      "All permission levels assigned here are AMBER or GREEN per doctrine (no RED, no payments/DNS/registrar actions), but every AMBER ticket still requires explicit human approval before any execution — this plan authorizes nothing on its own."
+    ]
+  },
+  "attempts": [
+    {
+      "providerId": "gemini",
+      "outcome": "skipped",
+      "model": null,
+      "error": "missing capability: code",
+      "errorCategory": "provider_unavailable",
+      "validation": null,
+      "usage": null,
+      "latencyMs": null,
+      "selectionReason": null,
+      "startedAt": "2026-09-09T14:14:03.564Z",
+      "finishedAt": "2026-09-09T14:14:03.564Z"
+    },
+    {
+      "providerId": "claude",
+      "outcome": "succeeded",
+      "model": "claude-sonnet-5",
+      "errorCategory": null,
+      "validation": {
+        "ok": true,
+        "schema": "build_plan@1",
+        "issues": []
+      },
+      "usage": {
+        "inputTokens": 9387,
+        "outputTokens": 6608
+      },
+      "latencyMs": 65128,
+      "selectionReason": "+ fallback (position 1 in the policy sequence) + text capability + structured_output capability + code capability + available",
+      "startedAt": "2026-09-09T14:14:03.564Z",
+      "finishedAt": "2026-09-09T14:15:08.694Z"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "runLabel": "IMVUSA (blind) - Stage 3/7 - Agent 03 Creative Director",
+  "agent": {
+    "code": "A03",
+    "shortCode": "03",
+    "name": "Creative Director",
+    "role": "Visual direction and design system",
+    "requiredCapabilities": ["text", "structured_output", "vision"],
+    "permissionLevel": "AMBER",
+    "defaultPriority": "BALANCED",
+    "responsibilities": ["Visual direction", "Design system tokens", "Component patterns"]
+  },
+  "taskType": "creative_direction",
+  "instructions": "GENUINELY BLIND RUN - no U-Proof or other client knowledge. You have NO real vision/image input in this run (the real Gemini/Claude adapters used here have no browsing or image-analysis tool) - you must explicitly disclose this limitation at the start of your 'direction' field, exactly as a previous unrelated benchmark run did, and label any palette/typography choice as a proposed starting hypothesis requiring human visual verification against the real site photography (which is central to a furniture/interior brand - do not pretend to have seen the actual leather couch or gallery photos). Base your direction on the craftsmanship/luxury-interior positioning in the research_report and site_blueprint (warm, tactile, upscale-but-approachable furniture brand, two SA regional locations). IMPORTANT OUTPUT FORMAT NOTE: return each field as a plain JSON array of strings/objects directly as the tool-call argument value. Do not emit any XML-style <parameter name=...> tags anywhere in your output, including inside string or array values - output must be pure JSON values with no embedded markup of any kind.",
+  "requiredOutputSchema": "design_system@1",
+  "knowledgeFile": "knowledge.json",
+  "inputs": [
+    { "file": "stage1-out.json", "id": "art_bench_im_research", "type": "research_report", "title": "Imvusa Research Report (Stage 1)" },
+    { "file": "stage2-out.json", "id": "art_bench_im_blueprint", "type": "site_blueprint", "title": "Imvusa Site Blueprint (Stage 2)" }
+  ]
+}

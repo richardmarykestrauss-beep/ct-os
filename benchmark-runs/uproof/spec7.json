@@ -1,0 +1,25 @@
+{
+  "runLabel": "U-PROOF (known) - Stage 7/7 - Orchestrator synthesis -> agent_benchmark_report@1",
+  "agent": {
+    "code": "ORCH",
+    "shortCode": "ORCH",
+    "name": "Orchestrator",
+    "role": "Workflow coordination & human approval gates",
+    "responsibilities": ["Coordinates the complete workflow", "Routes work to specialist agents", "Enforces human approval gates"],
+    "requiredCapabilities": ["text", "structured_output", "long_context"],
+    "permissionLevel": "AMBER",
+    "defaultPriority": "BALANCED"
+  },
+  "taskType": "orchestrate",
+  "instructions": "You are the Orchestrator. Synthesize the six prior U-Proof benchmark stage outputs (research, UX/site blueprint, creative/design system, SEO/content pack, build plan, QA audit) into a single agent_benchmark_report@1. This is the KNOWN/non-blind benchmark run: agents legitimately drew on existing CT-OS project knowledge and prior real Creative Touch audit history for U-Proof - list exactly which of that existing knowledge was actually used in knownContextUsed (e.g. prior audit findings, real pricing, business context). Be concise and prioritize the highest-confidence, most concrete findings over exhaustive coverage - roughly 6-10 items per findings list is enough, do not pad. For each field: businessUnderstanding (what the pipeline correctly understood about U-Proof's business); audienceInferred; conversionModelInferred; siteStrengths (real, current strengths - not aspirational); uxWeaknesses/visualWeaknesses/seoContentWeaknesses/technicalFindings (each item: id, finding, the actual evidence backing it, confidence 0-1); recommendedImplementationPlan (ordered, referencing real build_plan tickets where relevant); confidenceSummary (per major finding, confidence + why); unsupportedAssumptionsRejected (pull directly from Stage 6 QA's defects - the assumptions QA actually challenged and why); humanReviewQuestions (the genuinely open questions across all stages - address reconciliation, payment/shipping credentials, etc.); evidenceLog (the real WebFetch URLs and PROJECT_FACTS references actually used across the pipeline). Do not invent findings not traceable to the six stage artifacts supplied.",
+  "requiredOutputSchema": "agent_benchmark_report@1",
+  "knowledgeFile": "knowledge.json",
+  "inputs": [
+    { "file": "stage1-out.json", "id": "art_bench_up_research", "type": "research_report", "title": "U-Proof Research Report (Stage 1)" },
+    { "file": "stage2-out.json", "id": "art_bench_up_blueprint", "type": "site_blueprint", "title": "U-Proof Site Blueprint (Stage 2)" },
+    { "file": "stage3-out.json", "id": "art_bench_up_design", "type": "design_system", "title": "U-Proof Design System (Stage 3)" },
+    { "file": "stage4-out.json", "id": "art_bench_up_content", "type": "content_pack", "title": "U-Proof Content Pack (Stage 4)" },
+    { "file": "stage5-out.json", "id": "art_bench_up_buildplan", "type": "build_plan", "title": "U-Proof Build Plan (Stage 5)" },
+    { "file": "stage6-out.json", "id": "art_bench_up_qa", "type": "qa_report", "title": "U-Proof QA Report (Stage 6)" }
+  ]
+}

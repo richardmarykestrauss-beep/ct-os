@@ -21,6 +21,32 @@ const evidenceRef = z.object({
 
 const severity = z.enum(["P0", "P1", "P2", "P3"]);
 
+// Shared by the CTOS-004A benchmark report schemas below: one discrete, evidence-backed
+// observation, always carrying its own confidence so "confidence per finding" is a property
+// of the finding itself rather than a separate list that has to stay in sync by hand.
+const findingItem = z.object({
+  id: nonEmpty.describe("Short stable slug, e.g. \"ux-nav-depth\""),
+  finding: nonEmpty,
+  evidence: nonEmpty.describe("What was actually observed - a URL, a rendered page detail, a specific element"),
+  confidence: z.number().min(0).max(1),
+});
+
+const benchmarkReportShape = {
+  businessUnderstanding: nonEmpty,
+  audienceInferred: shortList,
+  conversionModelInferred: nonEmpty,
+  siteStrengths: z.array(findingItem).max(30),
+  uxWeaknesses: z.array(findingItem).max(50),
+  visualWeaknesses: z.array(findingItem).max(50),
+  seoContentWeaknesses: z.array(findingItem).max(50),
+  technicalFindings: z.array(findingItem).max(50),
+  recommendedImplementationPlan: z.array(z.object({ step: nonEmpty, rationale: nonEmpty, priority: severity })).min(1).max(50),
+  confidenceSummary: z.array(z.object({ findingId: nonEmpty, confidence: z.number().min(0).max(1), rationale: nonEmpty })).max(150),
+  unsupportedAssumptionsRejected: shortList.describe("Assumptions Agent 06 QA explicitly challenged and struck, with why"),
+  humanReviewQuestions: shortList,
+  evidenceLog: z.array(evidenceRef).max(50),
+};
+
 export const SCHEMAS = {
   "project_brief@1": z.object({
     goal: nonEmpty,
@@ -105,6 +131,44 @@ export const SCHEMAS = {
       .min(1)
       .max(20),
   }),
+  // CTOS-004A Part Q: agent_benchmark_report@1 is the U-Proof "known" run (agents have normal
+  // access to existing CT-OS project knowledge/artifacts for U-Proof); blind_benchmark_report@1
+  // is the Imvusa run, which must NOT draw on U-Proof or any cross-project knowledge - only
+  // APPROVED Creative Touch doctrine. Both share benchmarkReportShape so cross-site comparison
+  // is apples-to-apples; agent_benchmark_report@1 adds knownContextUsed to make what carried
+  // over from prior project knowledge explicit and auditable.
+  "agent_benchmark_report@1": z.object({
+    ...benchmarkReportShape,
+    knownContextUsed: shortList.describe("Existing CT-OS project knowledge/artifacts legitimately drawn on for this non-blind run"),
+  }),
+  "blind_benchmark_report@1": z.object(benchmarkReportShape),
+  "cross_site_agent_evaluation@1": z.object({
+    summary: nonEmpty,
+    dimensions: z
+      .array(
+        z.object({
+          dimension: z.enum([
+            "independent_discovery_quality",
+            "generic_vs_site_specific",
+            "hallucinations",
+            "implementation_specificity",
+            "visual_reasoning_quality",
+            "seo_reasoning_quality",
+            "qa_challenge_quality",
+          ]),
+          uProofAssessment: nonEmpty,
+          imvusaAssessment: nonEmpty,
+          verdict: nonEmpty,
+        }),
+      )
+      .length(7),
+    trustRecommendation: z.object({
+      verdict: z.enum(["TRUST", "TRUST_WITH_CONDITIONS", "DO_NOT_TRUST_YET"]),
+      rationale: nonEmpty,
+      conditions: shortList,
+    }),
+    overallFindings: shortList,
+  }),
   "other@1": z.object({ summary: nonEmpty, content: z.unknown().optional() }),
 } as const;
 
@@ -155,6 +219,51 @@ export const EXAMPLES: Record<SchemaName, unknown> = {
   "lesson_candidate@1": {
     summary: "Stub lesson candidates.",
     lessons: [{ title: "Browser rendering beats HTTP-200 checks", content: "An HTTP 200 proves the page served, not that it rendered.", category: "qa", evidence: ["CT-UP-019"], confidence: 0.6, proposedScope: "AGENCY" }],
+  },
+  "agent_benchmark_report@1": {
+    businessUnderstanding: "Stub: waterproofing products supplier selling direct and via trade.",
+    audienceInferred: ["Trade buyers", "DIY homeowners"],
+    conversionModelInferred: "Stub: add to cart / request a quote",
+    siteStrengths: [{ id: "product-range", finding: "Broad, clearly categorised product range", evidence: "Shop page category list", confidence: 0.8 }],
+    uxWeaknesses: [{ id: "nav-depth", finding: "Some solution pages are 3+ clicks from home", evidence: "Sitemap crawl", confidence: 0.6 }],
+    visualWeaknesses: [{ id: "hero-contrast", finding: "Low text/background contrast on the hero", evidence: "Rendered homepage screenshot", confidence: 0.7 }],
+    seoContentWeaknesses: [{ id: "meta-missing", finding: "Missing meta description on the shop page", evidence: "Page <head> inspection", confidence: 0.9 }],
+    technicalFindings: [{ id: "no-shipping", finding: "No shipping zones configured at checkout", evidence: "Test order flow", confidence: 0.9 }],
+    recommendedImplementationPlan: [{ step: "Configure shipping zones", rationale: "Checkout currently accepts orders with no shipping cost", priority: "P0" }],
+    confidenceSummary: [{ findingId: "no-shipping", confidence: 0.9, rationale: "Directly reproduced via a test order" }],
+    unsupportedAssumptionsRejected: ["Assumed Payflex was live - QA found no configured gateway"],
+    humanReviewQuestions: ["Which shipping carriers/rates should be configured?"],
+    evidenceLog: [{ ref: "https://example.invalid/shop", note: "Live shop page fetch" }],
+    knownContextUsed: ["Prior CT-OS U-Proof project audits and tickets"],
+  },
+  "blind_benchmark_report@1": {
+    businessUnderstanding: "Stub: furniture retailer.",
+    audienceInferred: ["Homeowners furnishing a new space"],
+    conversionModelInferred: "Stub: enquiry form / call to action",
+    siteStrengths: [{ id: "product-photography", finding: "Clear product photography", evidence: "Homepage gallery", confidence: 0.7 }],
+    uxWeaknesses: [{ id: "no-search", finding: "No visible product search", evidence: "Header inspection", confidence: 0.6 }],
+    visualWeaknesses: [{ id: "inconsistent-spacing", finding: "Inconsistent section spacing", evidence: "Rendered page screenshots", confidence: 0.5 }],
+    seoContentWeaknesses: [{ id: "thin-copy", finding: "Thin product descriptions", evidence: "Product page content", confidence: 0.6 }],
+    technicalFindings: [{ id: "no-https-redirect", finding: "HTTP does not redirect to HTTPS", evidence: "Direct request", confidence: 0.8 }],
+    recommendedImplementationPlan: [{ step: "Force HTTPS redirect", rationale: "Mixed-protocol access is a trust and SEO risk", priority: "P1" }],
+    confidenceSummary: [{ findingId: "no-https-redirect", confidence: 0.8, rationale: "Reproduced with a direct unauthenticated request" }],
+    unsupportedAssumptionsRejected: ["Assumed a physical showroom exists - no address found on the site"],
+    humanReviewQuestions: ["Is there a physical showroom, and should the site say so?"],
+    evidenceLog: [{ ref: "https://example.invalid/", note: "Live homepage fetch" }],
+  },
+  "cross_site_agent_evaluation@1": {
+    summary: "Stub cross-site evaluation.",
+    dimensions: [
+      { dimension: "independent_discovery_quality", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "generic_vs_site_specific", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "hallucinations", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "implementation_specificity", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "visual_reasoning_quality", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "seo_reasoning_quality", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+      { dimension: "qa_challenge_quality", uProofAssessment: "Stub", imvusaAssessment: "Stub", verdict: "Stub" },
+    ],
+    trustRecommendation: { verdict: "TRUST_WITH_CONDITIONS", rationale: "Stub.", conditions: ["Stub condition"] },
+    overallFindings: ["Stub finding"],
   },
   "other@1": { summary: "Stub output." },
 };
