@@ -22,10 +22,15 @@ export interface StubProviderOptions {
   connectionState?: ProviderConnectionState;
 }
 
+// Includes the full CTOS-003 Part E capability set (reasoning, fast_generation, creative_generation)
+// alongside the original set. These three are never used as a hard requiredCapabilities gate on any
+// seeded agent (see data/seed.ts) — only as ranking bonuses (ai/ranking.ts, Part F) — so widening this
+// table only changes *why* a provider is favoured under a given ExecutionPriority, never *whether* an
+// existing required-capability check passes or fails.
 export const DEFAULT_CAPABILITIES: Record<ProviderId, ProviderCapability[]> = {
-  claude: ["text", "structured_output", "long_context", "vision", "code", "review"],
-  openai: ["text", "structured_output", "vision", "code", "review"],
-  gemini: ["text", "structured_output", "long_context", "vision", "review"],
+  claude: ["text", "structured_output", "long_context", "vision", "code", "review", "reasoning", "creative_generation"],
+  openai: ["text", "structured_output", "vision", "code", "review", "fast_generation", "creative_generation"],
+  gemini: ["text", "structured_output", "long_context", "vision", "review", "reasoning", "fast_generation"],
 };
 
 export const PROVIDER_DISPLAY: Record<ProviderId, string> = { claude: "Claude", openai: "OpenAI", gemini: "Gemini" };

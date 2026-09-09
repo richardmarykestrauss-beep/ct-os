@@ -9,6 +9,7 @@ import type { AgentStatus, ProviderId } from "@/data/types";
 import { PROVIDER_IDS, PROVIDER_LABELS } from "@/ai/registry";
 import { useGatewayHealth } from "@/gateway/useGatewayHealth";
 import { ProviderStateBadge } from "@/components/os/status";
+import { SKILL_STATUS_LABELS } from "@/services/skills";
 import { Bot, Crown } from "lucide-react";
 
 export const Route = createFileRoute("/agents")({ component: AgentsPage });
@@ -141,6 +142,26 @@ function AgentsPage() {
                 <Field label="Produces">
                   <span className="text-[12px] text-ink-2">{a.producesArtifactTypes.map((t) => t.replace(/_/g, " ")).join(", ") || "—"}</span>
                 </Field>
+                <Field label="Capabilities">
+                  <span className="text-[11px] text-ink-2">{a.requiredCapabilities.join(", ")}</span>
+                </Field>
+                <Field label="Priority">
+                  <span className="text-[11px] text-ink-2">{a.defaultPriority ?? "BALANCED"}</span>
+                </Field>
+                {a.instructionPackIds?.length ? (
+                  <Field label="Active skill">
+                    <div className="flex flex-col gap-0.5">
+                      {a.instructionPackIds.map((id) => {
+                        const skill = data.skills.find((s) => s.id === id);
+                        return skill ? (
+                          <span key={id} className="text-[11px] text-ink-2">
+                            {skill.name} <span className="font-mono text-[10px] text-muted">v{skill.version}</span> · {SKILL_STATUS_LABELS[skill.status]}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </Field>
+                ) : null}
                 <div className={cn("col-span-2", isOrch && "md:col-span-4")}>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">Responsibilities</div>
                   <ul className="mt-1 flex flex-wrap gap-1">

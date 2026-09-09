@@ -24,8 +24,8 @@ export type MutationOp = "insert" | "update" | "delete";
  * Physical DELETE restricted to ADMIN. Reasoning per table:
  *  - projects, clients: primary business records.
  *  - artifacts, agent_runs, activity_events, approvals, execution_logs: history/audit trails.
- *  - knowledge_items, agent_lessons: reviewed institutional knowledge — rejection is a status change,
- *    not a delete.
+ *  - knowledge_items, agent_lessons, skills: reviewed institutional knowledge — rejection/deprecation
+ *    is a status change, not a delete (CTOS-003: skills follow the exact same reasoning as knowledge).
  *  - launch_holds, qa_runs: launch-safety record; must not quietly disappear.
  *  - agent_jobs, job_approvals: deleting a job cascades (FK on delete cascade) to its job_approvals
  *    and execution_logs — an accidental TEAM_MEMBER/PRODUCTION_LEAD delete here would silently erase
@@ -46,6 +46,7 @@ export const ADMIN_ONLY_DELETE_TABLES = [
   "agent_jobs",
   "job_approvals",
   "execution_logs",
+  "skills",
 ] as const;
 
 /** Routine operational tables where PRODUCTION_LEAD may also delete, in addition to ADMIN. */

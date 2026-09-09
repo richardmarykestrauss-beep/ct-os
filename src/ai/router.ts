@@ -9,17 +9,21 @@
  *      next provider is tried
  *   4. every skip / failure / validation failure / success is recorded as an attempt, in policy
  *      order, so execution history can show "Claude — failed validation · OpenAI — completed"
- * Cost/priority-based routing has a reserved hook (`rank`).
+ * Cost/priority-based routing is `rank` (CTOS-003 Part F) — deterministic and explainable, see
+ * ai/ranking.ts; each attempt carries the `selectionReason` bullets that produced its position.
  */
 import type { ProviderId } from "@/data/types";
 import { ProviderRegistry } from "./registry";
 import { validateOutput } from "@/schemas/artifacts";
+import { defaultRank, type RankedCandidate } from "./ranking";
 import { NoProviderAvailableError, ProviderError, type AIProvider, type ExecutionRequest, type ProviderRequest, type RouterAttempt, type RouterResult, type RoutingDecision } from "./types";
+
+type PlanRequest = Pick<ExecutionRequest, "preferredProvider" | "fallbackProviders" | "requiredCapabilities" | "executionPriority">;
 
 export interface ModelRouterOptions {
   registry: ProviderRegistry;
-  /** Optional re-ordering hook for cost/priority routing later. Receives the filtered candidates. */
-  rank?: (candidates: AIProvider[], request: ExecutionRequest) => AIProvider[];
+  /** Deterministic, explainable ordering (CTOS-003 Part F). Defaults to ai/ranking.ts#defaultRank. */
+  rank?: (candidates: AIProvider[], request: PlanRequest) => RankedCandidate[];
   /** Global provider allow-list (e.g. from Settings). Undefined = all. */
   enabledProviders?: ProviderId[];
   now?: () => string;
@@ -28,14 +32,14 @@ export interface ModelRouterOptions {
 
 export class ModelRouter {
   private readonly registry: ProviderRegistry;
-  private readonly rank?: ModelRouterOptions["rank"];
+  private readonly rank: NonNullable<ModelRouterOptions["rank"]>;
   private readonly enabled?: Set<ProviderId>;
   private readonly now: () => string;
   private readonly clock: () => number;
 
   constructor(opts: ModelRouterOptions) {
     this.registry = opts.registry;
-    this.rank = opts.rank;
+    this.rank = opts.rank ?? defaultRank;
     this.enabled = opts.enabledProviders ? new Set(opts.enabledProviders) : undefined;
     this.now = opts.now ?? (() => new Date().toISOString());
     this.clock = opts.clock ?? (() => Date.now());
@@ -50,7 +54,7 @@ export class ModelRouter {
   }
 
   /** Pure planning step — useful for the UI ("this job would run on …") and for tests. */
-  async plan(request: Pick<ExecutionRequest, "preferredProvider" | "fallbackProviders" | "requiredCapabilities">): Promise<RoutingDecision> {
+  async plan(request: PlanRequest): Promise<RoutingDecision> {
     const sequence = policySequence(request);
     const excluded: RoutingDecision["excluded"] = [];
     const candidates: AIProvider[] = [];
@@ -76,8 +80,10 @@ export class ModelRouter {
       }
       candidates.push(provider);
     }
-    const ordered = this.rank ? this.rank(candidates, request as ExecutionRequest) : candidates;
-    return { order: ordered.map((p) => p.id), excluded };
+    const ranked = this.rank(candidates, request);
+    const reasons: RoutingDecision["reasons"] = {};
+    for (const r of ranked) reasons[r.provider.id] = r.reasons;
+    return { order: ranked.map((r) => r.provider.id), excluded, reasons };
   }
 
   async execute(request: ProviderRequest): Promise<RouterResult> {
@@ -85,22 +91,27 @@ export class ModelRouter {
     const excluded = new Map(decision.excluded.map((e) => [e.providerId, e.reason]));
     const sequence = policySequence(request);
     const ranked = new Set(decision.order);
+    const reasonText = (id: ProviderId): string | null => {
+      const r = decision.reasons[id];
+      return r ? r.map((x) => `+ ${x}`).join(" ") : null;
+    };
     const attempts: RouterAttempt[] = [];
     for (const id of sequence) {
       if (excluded.has(id) || !ranked.has(id)) {
         const at = this.now();
-        attempts.push({ providerId: id, outcome: "skipped", model: null, error: excluded.get(id) ?? "not selected", errorCategory: "provider_unavailable", validation: null, usage: null, latencyMs: null, startedAt: at, finishedAt: at });
+        attempts.push({ providerId: id, outcome: "skipped", model: null, error: excluded.get(id) ?? "not selected", errorCategory: "provider_unavailable", validation: null, usage: null, latencyMs: null, selectionReason: null, startedAt: at, finishedAt: at });
       }
     }
     for (const id of decision.order) {
       const provider = this.registry.get(id)!;
+      const selectionReason = reasonText(id);
       const startedAt = this.now();
       const t0 = this.clock();
       try {
         const response = await provider.execute(request);
         const latencyMs = this.clock() - t0;
         if (response.finishReason === "refused") {
-          attempts.push({ providerId: id, outcome: "failed", model: response.model, error: response.summary, errorCategory: "provider_error", validation: null, usage: response.usage, latencyMs, startedAt, finishedAt: this.now() });
+          attempts.push({ providerId: id, outcome: "failed", model: response.model, error: response.summary, errorCategory: "provider_error", validation: null, usage: response.usage, latencyMs, selectionReason, startedAt, finishedAt: this.now() });
           continue;
         }
         const validation = validateOutput(request.requiredOutputSchema, response.output);
@@ -118,16 +129,17 @@ export class ModelRouter {
             usage: response.usage,
             latencyMs,
             rawOutput: response.output,
+            selectionReason,
             startedAt,
             finishedAt: this.now(),
           });
           continue;
         }
-        attempts.push({ providerId: id, outcome: "succeeded", model: response.model, errorCategory: null, validation: { ok: true, schema: validation.schema, issues: [] }, usage: response.usage, latencyMs, startedAt, finishedAt: this.now() });
+        attempts.push({ providerId: id, outcome: "succeeded", model: response.model, errorCategory: null, validation: { ok: true, schema: validation.schema, issues: [] }, usage: response.usage, latencyMs, selectionReason, startedAt, finishedAt: this.now() });
         return { providerId: id, response, output: validation.value, validation: { ok: true, schema: validation.schema, issues: [] }, attempts: orderAttempts(attempts, sequence) };
       } catch (err) {
         const category = err instanceof ProviderError ? err.category : "provider_error";
-        attempts.push({ providerId: id, outcome: "failed", model: null, error: err instanceof Error ? err.message : String(err), errorCategory: category, validation: null, usage: null, latencyMs: this.clock() - t0, startedAt, finishedAt: this.now() });
+        attempts.push({ providerId: id, outcome: "failed", model: null, error: err instanceof Error ? err.message : String(err), errorCategory: category, validation: null, usage: null, latencyMs: this.clock() - t0, selectionReason, startedAt, finishedAt: this.now() });
       }
     }
     throw new NoProviderAvailableError(request.jobId, orderAttempts(attempts, sequence));

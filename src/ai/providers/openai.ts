@@ -12,6 +12,7 @@
 import type { ProviderCapability, ProviderId } from "@/data/types";
 import { ProviderError, type AIProvider, type ProviderAvailability, type ProviderConnectionState, type ProviderRequest, type ProviderResponse } from "../types";
 import { DEFAULT_CAPABILITIES } from "./stub";
+import { HealthTracker } from "./health";
 
 export const OPENAI_ENV_VAR = "OPENAI_API_KEY";
 export const OPENAI_MODEL_ENV_VAR = "OPENAI_MODEL";
@@ -28,6 +29,11 @@ export interface OpenAIProviderOptions {
   fetch?: FetchLike;
   timeoutMs?: number;
   capabilities?: ProviderCapability[];
+  /** Turned off by policy regardless of credential (CTOS-003 Part N). */
+  disabled?: boolean;
+  /** Test seams for the health tracker's cooldown window. */
+  healthCooldownMs?: number;
+  healthClock?: () => number;
 }
 
 interface ChatCompletion {
@@ -40,13 +46,13 @@ export class OpenAIProvider implements AIProvider {
   readonly id: ProviderId = "openai";
   readonly displayName = "OpenAI";
   readonly capabilities: ProviderCapability[];
-  readonly connected: boolean;
-  readonly connectionState: ProviderConnectionState;
   private readonly apiKey: string | null;
   private readonly model: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike | null;
   private readonly timeoutMs: number;
+  private readonly disabledFlag: boolean;
+  private readonly health: HealthTracker;
 
   constructor(opts: OpenAIProviderOptions = {}) {
     this.apiKey = opts.apiKey?.trim() || null;
@@ -55,17 +61,31 @@ export class OpenAIProvider implements AIProvider {
     this.fetchImpl = opts.fetch ?? ((globalThis as { fetch?: FetchLike }).fetch ?? null);
     this.timeoutMs = opts.timeoutMs ?? 120_000;
     this.capabilities = opts.capabilities ?? DEFAULT_CAPABILITIES.openai;
-    this.connected = !!this.apiKey;
-    this.connectionState = this.apiKey ? "connected" : "not_configured";
+    this.disabledFlag = opts.disabled ?? false;
+    this.health = new HealthTracker({ cooldownMs: opts.healthCooldownMs, clock: opts.healthClock });
+  }
+
+  get connected(): boolean {
+    return !!this.apiKey && !this.disabledFlag;
+  }
+
+  /** Never a static field: reflects the credential, policy and the adapter's own recent failures (CTOS-003 Part N). */
+  get connectionState(): ProviderConnectionState {
+    if (this.disabledFlag) return "disabled";
+    if (!this.apiKey) return "not_configured";
+    return this.health.state() ?? "connected";
   }
 
   availability(): ProviderAvailability {
+    if (this.disabledFlag) return { available: false, reason: "disabled by policy" };
     if (!this.apiKey) return { available: false, reason: `not configured (${OPENAI_ENV_VAR})` };
     if (!this.fetchImpl) return { available: false, reason: "no fetch implementation in this runtime" };
+    if (this.health.blocksAvailability()) return { available: false, reason: this.health.reason()! };
     return { available: true };
   }
 
   async execute(request: ProviderRequest): Promise<ProviderResponse> {
+    if (this.disabledFlag) throw new ProviderError(this.id, "OpenAI adapter is disabled by policy", "config", false);
     if (!this.apiKey || !this.fetchImpl) throw new ProviderError(this.id, `OpenAI adapter is not configured (${OPENAI_ENV_VAR})`, "config", false);
     const body = {
       model: this.model,
@@ -90,11 +110,13 @@ export class OpenAIProvider implements AIProvider {
           signal: controller?.signal,
         });
       } catch (err) {
+        this.health.recordFailure("provider_unavailable", null);
         throw new ProviderError(this.id, `OpenAI request failed: ${sanitize(err instanceof Error ? err.message : String(err), this.apiKey)}`, "provider_unavailable", true);
       }
       if (!res.ok) {
         const text = sanitize((await res.text().catch(() => "")).slice(0, 300), this.apiKey);
         const category = res.status === 401 || res.status === 403 ? "config" : res.status === 429 || res.status >= 500 ? "provider_unavailable" : "provider_error";
+        this.health.recordFailure(category, res.status);
         throw new ProviderError(this.id, `OpenAI HTTP ${res.status}${text ? `: ${text}` : ""}`, category, category !== "config");
       }
       try {
@@ -106,6 +128,7 @@ export class OpenAIProvider implements AIProvider {
       // Covers the body read as well as the request.
       if (timer) clearTimeout(timer);
     }
+    this.health.recordSuccess();
     const choice = json.choices?.[0];
     if (choice?.message?.refusal) {
       return { providerId: this.id, model: json.model ?? this.model, output: null, summary: `OpenAI refused: ${choice.message.refusal.slice(0, 200)}`, usage: usageOf(json), finishReason: "refused" };

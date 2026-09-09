@@ -24,6 +24,7 @@ import type {
   ProjectPhase,
   QAItem,
   QARun,
+  Skill,
   Ticket,
 } from "./types";
 
@@ -43,6 +44,12 @@ export const AGENT_IDS = {
   A06: "agent_06",
   A07: "agent_07",
   A08: "agent_08",
+} as const;
+
+export const SKILL_IDS = {
+  UX_REVIEW_PACK: "skill_ux_review_pack",
+  VISUAL_DESIGN: "skill_ct_visual_design",
+  ELEMENTOR_BUILDER: "skill_ct_elementor_builder",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -164,6 +171,10 @@ const agents: Agent[] = [
     producesArtifactTypes: ["site_blueprint"],
     consumesArtifactTypes: ["research_report", "project_brief", "client_feedback"],
     canExecuteSiteChanges: false,
+    mission: "Turn business and research context into an information architecture and conversion logic a builder can execute without guessing.",
+    exclusions: ["Never writes final page copy (Agent 04)", "Never changes a live site"],
+    defaultPriority: "BALANCED",
+    instructionPackIds: [SKILL_IDS.UX_REVIEW_PACK],
   }),
   agent({
     id: AGENT_IDS.A03,
@@ -180,6 +191,13 @@ const agents: Agent[] = [
     producesArtifactTypes: ["design_system"],
     consumesArtifactTypes: ["site_blueprint", "research_report", "client_feedback"],
     canExecuteSiteChanges: false,
+    mission: "Set the visual direction, layout system and design tokens the build must follow — and judge whether a finished build reads as client-ready.",
+    exclusions: ["Never self-certifies its own visual QA verdict on someone else's build (Agent 06 reviews)", "Never writes Elementor/WordPress structure itself"],
+    // creative_generation is a preference, not a hard gate: QUALITY priority (below) surfaces it as a
+    // ranking bonus (ai/ranking.ts) on top of the required vision capability, without excluding an
+    // otherwise-capable provider that a deployment simply hasn't tagged with it.
+    defaultPriority: "QUALITY",
+    instructionPackIds: [SKILL_IDS.VISUAL_DESIGN],
   }),
   agent({
     id: AGENT_IDS.A04,
@@ -212,6 +230,10 @@ const agents: Agent[] = [
     producesArtifactTypes: ["build_report"],
     consumesArtifactTypes: ["build_plan", "design_system", "content_pack", "site_blueprint", "qa_report"],
     canExecuteSiteChanges: true,
+    mission: "Implement the approved design system and content in Elementor/WordPress natively, editable-first, without private mutations no one else can maintain.",
+    exclusions: ["Never certifies its own visual quality (Agent 03/06 do)", "Never activates a launch itself"],
+    defaultPriority: "BALANCED",
+    instructionPackIds: [SKILL_IDS.ELEMENTOR_BUILDER],
   }),
   agent({
     id: AGENT_IDS.A06,
@@ -260,7 +282,97 @@ const agents: Agent[] = [
     producesArtifactTypes: ["lesson_candidate"],
     consumesArtifactTypes: ["qa_report", "client_feedback", "build_report", "deployment_report", "research_report"],
     canExecuteSiteChanges: false,
+    mission: "Turn scattered evidence (QA defects, client feedback, performance data) into proposed, evidence-backed lessons — never decides what becomes doctrine.",
+    exclusions: ["Never approves its own lesson proposals (a human always reviews)", "Never builds or executes site changes"],
+    // reasoning is a preference, not a hard gate: QUALITY priority makes ai/ranking.ts favour a
+    // reasoning-capable candidate among providers that already meet requiredCapabilities, rather than
+    // excluding an otherwise-capable provider a deployment hasn't tagged with it.
+    defaultPriority: "QUALITY",
   }),
+];
+
+// ---------------------------------------------------------------------------
+// Skills / instruction packs (CTOS-003 Parts I, J, K, L) — see docs/SKILL-SYSTEM.md.
+//
+// One instruction pack is APPROVED so production execution has a real, non-empty example of
+// "only APPROVED skills reach a job's context" (see services/skills.ts, ai/registry.ts wiring).
+// The two named agency skills are seeded CANDIDATE, exactly as CTOS-003 asks ("foundation only
+// — do NOT mark it permanent Agency doctrine"): they exist, are reviewable in the Knowledge/Skills
+// UI, and are excluded from execution context until a human approves them.
+// ---------------------------------------------------------------------------
+const skills: Skill[] = [
+  {
+    id: SKILL_IDS.UX_REVIEW_PACK,
+    name: "UX & Conversion Review Checklist v1",
+    version: 1,
+    kind: "instruction_pack",
+    status: "APPROVED",
+    scope: "agent-behaviour",
+    ownerAgentIds: [AGENT_IDS.A02],
+    reviewerAgentIds: [AGENT_IDS.A06],
+    content:
+      "Before proposing a sitemap or conversion journey: (1) every primary journey must resolve to one clear conversion goal — no page may leave the visitor without a next action; (2) IA depth stays at or under 3 clicks from home for any commercial page; (3) state the conversion logic in plain language a client can read, not just a diagram; (4) call out open questions explicitly rather than guessing at missing business context; (5) never propose a structure that requires a page type the build agent has not been given.",
+    evidence: ["CTOS-003 seed — modelled on U-Proof site_blueprint reviews"],
+    supersedesId: null,
+    approvedBy: "Richard",
+    approvedById: "u_admin_seed",
+    approvedAt: null,
+    createdAt: null,
+    updatedAt: null,
+  },
+  {
+    id: SKILL_IDS.VISUAL_DESIGN,
+    name: "CT Visual Design Skill v0.1",
+    version: 1,
+    kind: "design_review",
+    status: "CANDIDATE",
+    scope: "design-review",
+    ownerAgentIds: [AGENT_IDS.A03],
+    reviewerAgentIds: [AGENT_IDS.A06],
+    content:
+      "Structured client-readiness review, scored per category, never self-certified by the builder: " +
+      "Brand consistency (logo/colour/type used correctly and consistently); Hierarchy (the eye is led to the primary action on every page); " +
+      "Spacing (consistent rhythm, no cramped or wildly uneven gaps); Typography (a small, consistent type scale, no orphaned styles); " +
+      "Navigation (desktop and mobile nav are complete, uncluttered, and every link resolves); Responsiveness (desktop/tablet/mobile screenshots reviewed at real breakpoints — no clipped text, no overlap); " +
+      "Conversion clarity (the primary CTA is unambiguous per page); Content clarity (no placeholder/lorem text, no inconsistent shared components); " +
+      "Product presentation (product cards are legible, images are relevant and correctly cropped); Trust/professionalism (the page would not embarrass the agency in front of the client); " +
+      "Technical visual defects (no clipped text, no visible internal scaffolding, no broken shared components). " +
+      "Each category is scored individually, then a single client-readiness verdict is given: A = SAFE TO SEND, B = SMALL POLISH PASS (list exactly what), C = NOT READY (list why). " +
+      "Design quality is judged separately from technical correctness — a page can be functionally correct (HTTP 200, no console errors) and still fail this review.",
+    evidence: ["U-Proof visual QA passes — desktop/tablet/mobile screenshot review", "U-Proof product card legibility fixes"],
+    supersedesId: null,
+    approvedBy: null,
+    approvedById: null,
+    approvedAt: null,
+    createdAt: null,
+    updatedAt: null,
+  },
+  {
+    id: SKILL_IDS.ELEMENTOR_BUILDER,
+    name: "CT Elementor Builder Skill v0.1",
+    version: 1,
+    kind: "build_practice",
+    status: "CANDIDATE",
+    scope: "build-practice",
+    ownerAgentIds: [AGENT_IDS.A05],
+    reviewerAgentIds: [AGENT_IDS.A06],
+    content:
+      "Validated WordPress/Elementor implementation practice, foundation only: " +
+      "Build with native Elementor containers/widgets first — avoid giant custom HTML blobs; keep construction editable-first so a human can adjust it in the editor afterward; " +
+      "use the global Site Kit (colours, type, spacing) rather than per-page overrides; scope custom CSS narrowly and use custom JS only when a native option genuinely does not exist; " +
+      "any structured Elementor write (via the REST/DB layer) must be re-read and parsed immediately after writing, to confirm it saved as intended, not assumed from a 200 response; " +
+      "take a backup before any material mutation; wp_slash semantics differ between WP metadata APIs and raw DB writes — treat raw DB writes as a narrow fallback only, never the default path; " +
+      "verify Elementor page/template CSS actually propagated (not just that the save call succeeded); browser render validation is required — HTTP 200 is not visual QA; " +
+      "validate with real CDP viewport emulation at 1440/1254/1024/768/480/375; check shared header/footer consistency across templates; " +
+      "the builder never certifies its own final visual quality (Agent 03/06 do, via the CT Visual Design Skill); all work stays isolated from production until a human approves it, and every risky change has a stated rollback plan before it is made.",
+    evidence: ["U-Proof Elementor build — global Site Kit usage", "U-Proof structured write verification practice"],
+    supersedesId: null,
+    approvedBy: null,
+    approvedById: null,
+    approvedAt: null,
+    createdAt: null,
+    updatedAt: null,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -858,4 +970,5 @@ export const seedData: OSData = {
   projectIntegrations: [],
   jobApprovals: [],
   executionLogs: [],
+  skills,
 };

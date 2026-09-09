@@ -45,8 +45,10 @@ while Supabase is not configured.
 * `POST <gateway>` — body `{ jobId, artifactTitle? }`, header `Authorization: Bearer <supabase access token>`.
   Responses (JSON): `{ ok: true, result: ExecutionResult, records, permission }` or
   `{ ok: false, code, message, permission?, status }` with HTTP 401 / 403 / 404 / 409 / 400.
-* `GET <gateway>/health` — provider connection states (`connected | not_configured | stub`), the
-  gateway mode, and the caller's identity. Auth required. No secret values, only env var **names**.
+* `GET <gateway>/health` — provider connection states (one of the seven `ProviderConnectionState`
+  values — `connected | not_configured | unavailable | rate_limited | degraded | disabled | stub`,
+  see `docs/PROVIDER-ADAPTERS.md`), the gateway mode, and the caller's identity. Auth required. No
+  secret values, only env var **names**.
 
 `<gateway>` resolves to `VITE_CTOS_GATEWAY_URL`, else `/agent-execute` in dev, else
 `<VITE_SUPABASE_URL>/functions/v1/agent-execute`.
@@ -57,16 +59,38 @@ while Supabase is not configured.
 `jobId, projectId, agentId, agent{code,name,role,responsibilities}, taskType, instructions,
 inputArtifacts[], approvedKnowledge{doctrine[],agency[],project[],task[]}, availableTools[],
 requiredOutputSchema, schemaVersion, preferredProvider, fallbackProviders[], requiredCapabilities[],
-permissionLevel, requestedById`.
+executionPriority, permissionLevel, requestedById, activeSkills[]`.
 
 Only **APPROVED** knowledge is ever included (`knowledgeForJob`). It is split by scope and rendered as
 separately labelled sections (`DOCTRINE`, `AGENCY KNOWLEDGE`, `PROJECT FACTS`, `TASK CONTEXT`) in the
 system context, so agency doctrine and one client's facts never blur. Input artifacts are the job's
 declared inputs only (payloads trimmed at 12 KB) — never the project's whole history.
 
+`activeSkills` (CTOS-003 Part L) is `ActiveSkillRef[]` (`{id, name, version, kind, content}`): the
+APPROVED-only skills relevant to this job's agent, computed by
+`approvedSkillsForAgent(data, job.agentId, agent.instructionPackIds ?? [])`
+(`src/services/skills.ts`). Both `OSDataGatewayStore.loadJobContext()` and
+`SupabaseGatewayStore.loadJobContext()` call it when assembling `JobContext`, and
+`buildExecutionRequestFromData()` (`src/services/agent-jobs.ts`) calls it again when building the
+envelope directly from an `OSData` snapshot. `toProviderRequest()` renders the result as its own
+labelled block in `systemContext`, kept apart from DOCTRINE/AGENCY KNOWLEDGE/PROJECT FACTS/TASK
+CONTEXT:
+
+```
+ACTIVE SKILLS (approved only — v1):
+- UX & Conversion Review Checklist v1 (v1): Before proposing a sitemap or conversion journey: ...
+```
+
+or `"ACTIVE SKILLS: none"` when nothing APPROVED applies. See `docs/SKILL-SYSTEM.md`.
+
 **ExecutionResult** — `provider, model, runId, status (COMPLETED | FAILED | FAILED_VALIDATION |
 REJECTED), output, outputSchema, schemaVersion, usage{inputTokens,outputTokens}, latencyMs,
 finishReason, error{category,message,issues?}, attempts[]`. Provider-specific shapes stop at the adapter.
+
+`usage` here (and on `ProviderResponse`) stays exactly `{inputTokens, outputTokens}` — deliberately
+never widened with a total or a cost. Adapter unit tests assert this object with an exact
+`toEqual({...})`, so `totalTokens`/`estimatedCostUsd` are computed one layer up instead — see
+"Execution logging" below.
 
 ## Server-side secret boundary
 
@@ -93,6 +117,28 @@ One `execution_logs` row per provider attempt (plus one for a rejected call): ag
 start/end, status, fallback index, permission check, validation result, artifact id, error category,
 usage. Written with the service role; readable by ADMIN and PRODUCTION_LEAD. The client mirrors the
 rows it receives but never writes to this table (the repository treats it as server-owned).
+
+CTOS-003 adds four optional fields to both `AgentRun` and `ExecutionLog`, computed once per attempt
+and shared by both records:
+
+* **`totalTokens`** — `totalTokensOf(usage)` (`src/ai/pricing.ts`): `inputTokens + outputTokens` when
+  at least one is a known number, else `null`.
+* **`estimatedCostUsd`** — `estimateCostUsd(providerId, model, usage)` (`src/ai/pricing.ts`): looks up
+  the provider+model in `PRICING_TABLE`, an explicitly illustrative, versioned (by `effectiveDate`)
+  table; `null` whenever the model isn't listed — CT-OS never guesses a price.
+* **`selectionReason`** — the human-readable string `ai/ranking.ts#explainSelection` produced for why
+  this provider was tried at this position (e.g. "Selected Claude because: + preferred provider for
+  this job + structured_output capability + reasoning capability (favoured by QUALITY priority) +
+  available"). Copied from `RouterAttempt.selectionReason`.
+* **`skillIds`** — `skillProvenance(activeSkills)` (`src/services/skills.ts`): the `"id@version"`
+  strings for every skill that was active in this attempt's context.
+
+`src/services/agent-jobs.ts#runsFromAttempts` computes the first three per attempt and takes
+`skillIds` as a parameter (shared across every run/log an execution produces); `src/gateway/core.ts`'s
+internal `attemptLog()` does the same for `ExecutionLog`, reading usage totals/cost off the same
+`RouterAttempt` and putting `totalTokens`/`estimatedCostUsd` inside `execution_logs.usage` (a jsonb
+column) rather than as separate top-level columns. Both are optional fields for backward
+compatibility with rows written before CTOS-003.
 
 ## Deploying the Edge Function
 

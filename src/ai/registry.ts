@@ -9,10 +9,10 @@
  */
 import type { ProviderId } from "@/data/types";
 import type { AIProvider, ProviderConnectionState } from "./types";
-import { ClaudeProvider, CLAUDE_ENV_VAR } from "./providers/claude";
-import { GeminiProvider, GEMINI_ENV_VAR } from "./providers/gemini";
+import { ClaudeProvider, CLAUDE_ENV_VAR, CLAUDE_MODEL_ENV_VAR } from "./providers/claude";
+import { GeminiProvider, GEMINI_ENV_VAR, GEMINI_MODEL_ENV_VAR } from "./providers/gemini";
 import { OpenAIProvider, OPENAI_ENV_VAR, OPENAI_MODEL_ENV_VAR, type FetchLike } from "./providers/openai";
-import { StubProvider, notConfigured } from "./providers/stub";
+import { StubProvider } from "./providers/stub";
 
 export const PROVIDER_IDS: ProviderId[] = ["claude", "openai", "gemini"];
 
@@ -78,17 +78,21 @@ export interface ServerRegistryOptions {
 }
 
 /**
- * Gateway registry. Reads provider credentials from the server environment. A provider without a
- * credential is registered as "not configured" so the router records the skip explicitly.
+ * Gateway registry. Reads provider credentials from the server environment. All three adapters
+ * (CTOS-003 Parts B/C/D) are real, live implementations — a provider without a credential simply
+ * reports itself "not configured" (via its own `availability()`/`connectionState`, the same code
+ * path a live provider that later loses its credential would report), so the router records the
+ * skip explicitly rather than crashing or silently degrading.
  * CTOS_ALLOW_STUB_PROVIDERS=1 swaps unconfigured providers for deterministic stubs (dev only).
  */
 export function createServerRegistry(env: ServerEnv, opts: ServerRegistryOptions = {}): ProviderRegistry {
   const allowStubs = env.CTOS_ALLOW_STUB_PROVIDERS === "1" || env.CTOS_ALLOW_STUB_PROVIDERS === "true";
   const openaiKey = env[OPENAI_ENV_VAR]?.trim();
+  const claudeKey = env[CLAUDE_ENV_VAR]?.trim();
+  const geminiKey = env[GEMINI_ENV_VAR]?.trim();
   const providers: AIProvider[] = [];
-  providers.push(openaiKey ? new OpenAIProvider({ apiKey: openaiKey, model: env[OPENAI_MODEL_ENV_VAR], fetch: opts.fetch }) : allowStubs ? new StubProvider({ id: "openai" }) : notConfigured("openai", OPENAI_ENV_VAR));
-  // Claude and Gemini adapters are seams in CTOS-002: their keys are reported but no live call exists yet.
-  providers.push(allowStubs ? new ClaudeProvider() : notConfigured("claude", CLAUDE_ENV_VAR));
-  providers.push(allowStubs ? new GeminiProvider() : notConfigured("gemini", GEMINI_ENV_VAR));
+  providers.push(openaiKey ? new OpenAIProvider({ apiKey: openaiKey, model: env[OPENAI_MODEL_ENV_VAR], fetch: opts.fetch }) : allowStubs ? new StubProvider({ id: "openai" }) : new OpenAIProvider({ fetch: opts.fetch }));
+  providers.push(claudeKey ? new ClaudeProvider({ apiKey: claudeKey, model: env[CLAUDE_MODEL_ENV_VAR], fetch: opts.fetch }) : allowStubs ? new StubProvider({ id: "claude" }) : new ClaudeProvider({ fetch: opts.fetch }));
+  providers.push(geminiKey ? new GeminiProvider({ apiKey: geminiKey, model: env[GEMINI_MODEL_ENV_VAR], fetch: opts.fetch }) : allowStubs ? new StubProvider({ id: "gemini" }) : new GeminiProvider({ fetch: opts.fetch }));
   return new ProviderRegistry(providers);
 }

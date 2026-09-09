@@ -19,8 +19,10 @@ performance and conversion evidence, and **proposes** lesson candidates. Human a
 becomes Agency knowledge (see `INTELLIGENCE-MODEL.md`).
 
 Each agent carries a **provider policy** — `preferred`, `fallbacks[]`, optional `reviewer` — and the
-capabilities its jobs need (`text`, `structured_output`, `long_context`, `vision`, `code`, `review`).
-Seeded policies (editable on the Agents page):
+capabilities its jobs need (`requiredCapabilities`: `text`, `structured_output`, `long_context`,
+`vision`, `code`, `review`, plus the CTOS-003 additions `reasoning`, `fast_generation`,
+`creative_generation` — see `docs/INTELLIGENCE-MODEL.md` for why none of the three new ones are used
+as a hard gate on any seeded agent). Seeded policies (editable on the Agents page):
 
 | Agent | Preferred | Fallback | Reviewer |
 |---|---|---|---|
@@ -37,34 +39,56 @@ Seeded policies (editable on the Agents page):
 The agent is the same agent whichever provider runs it (see "Agent continuity" below). Reviewer
 providers are recorded but not executed yet.
 
+An agent may also carry (CTOS-003 Part I, still optional — only some seeded agents have them):
+
+* `mission` — a one-line "why this agent exists" string, e.g. Agent 02's "Turn business and research
+  context into an information architecture and conversion logic a builder can execute without
+  guessing."
+* `exclusions` — things the agent explicitly must not do, beyond the permission model, e.g. Agent 05's
+  `["Never certifies its own visual quality (Agent 03/06 do)", "Never activates a launch itself"]`.
+* `defaultPriority` — an `ExecutionPriority` (`QUALITY | BALANCED | COST | SPEED`) used to seed
+  `AgentJob.executionPriority` when a job doesn't specify one (`createJob` in
+  `src/services/agent-jobs.ts` falls back to `agent.defaultPriority ?? "BALANCED"`). See
+  `docs/INTELLIGENCE-MODEL.md` for how the router uses this.
+* `instructionPackIds` — ids of APPROVED `Skill` rows (kind `instruction_pack`) this agent's jobs draw
+  on, in addition to any skill the agent owns or reviews. See "Instruction packs and skills" below.
+
 ## Provider independence
 
 ```
                         ┌──────────── src/ai (inside the gateway) ─────────────┐
  ExecutionRequest ──▶ ModelRouter ──▶ AIProvider (interface) ──▶ OpenAIProvider  (live, server-side)
-                        │                                        ClaudeProvider  (seam)
-                        │                                        GeminiProvider  (seam)
+                        │                                        ClaudeProvider  (live, server-side)
+                        │                                        GeminiProvider  (live, server-side)
                         └── validate(<type>@<version>) ── RouterResult { providerId, output, attempts[] }
 ```
 
 * `AIProvider`: `id`, `displayName`, `capabilities`, `connected`, `connectionState`, `availability()`, `execute(request)`.
 * `ProviderRequest` = provider-neutral `ExecutionRequest` (agent identity, instructions, input
-  artifacts, APPROVED knowledge split by scope, tools, `<type>@<version>` output schema, policy,
-  permission level) + assembled `systemContext` + `outputJsonSchema`.
+  artifacts, APPROVED knowledge split by scope, APPROVED `activeSkills`, tools, `<type>@<version>`
+  output schema, policy, `executionPriority`, permission level) + assembled `systemContext` +
+  `outputJsonSchema`.
 * `ProviderResponse`: structured `output`, human `summary`, `model`, `usage`, `finishReason`.
 * Stub adapters never touch the network; they return the schema example so the whole job → run →
-  artifact → handoff pipeline is exercisable. The OpenAI adapter is live (server-side only); Claude and
-  Gemini are seams that report "Not configured". Details: `docs/PROVIDER-ADAPTERS.md`.
+  artifact → handoff pipeline is exercisable. As of CTOS-003 all three real adapters (OpenAI, Claude,
+  Gemini) are live, server-side-only implementations of the same interface — a provider without its
+  credential reports itself `not_configured` rather than being a permanent stub. Details:
+  `docs/PROVIDER-ADAPTERS.md`.
 
 ### Routing decision (`ModelRouter.plan / execute`)
 
 1. Sequence = job.preferredProvider, then job.fallbackProviders (deduplicated).
 2. Exclude providers not registered, disabled in settings, missing a required capability, or
-   reporting themselves unavailable — each exclusion is recorded with its reason.
-3. Optional `rank()` hook re-orders survivors (reserved for cost/priority routing).
-4. Try in order; each answer is validated against the required schema — a refusal or a failed
+   reporting themselves unavailable — each exclusion is recorded with its reason. This is a hard
+   gate: `requiredCapabilities` never includes the CTOS-003 preference capabilities
+   (`reasoning`/`fast_generation`/`creative_generation`) on any seeded agent.
+3. `rankCandidates()` (`src/ai/ranking.ts`) scores the survivors — preferred-provider bonus plus
+   capability bonuses keyed by `executionPriority` — and orders them, recording a `reasons[]` list
+   for each. See `docs/PROVIDER-ROUTING.md`.
+4. Try in ranked order; each answer is validated against the required schema — a refusal or a failed
    validation is a failed attempt and the next provider is tried. Every skipped / failed /
-   failed-validation / succeeded attempt is recorded, in policy order.
+   failed-validation / succeeded attempt is recorded, in policy order, carrying its
+   `selectionReason`.
 5. If nothing succeeds: `NoProviderAvailableError` carrying all attempts; the job becomes FAILED
    (or FAILED_VALIDATION when only validation failed).
 
@@ -73,9 +97,13 @@ providers are recorded but not executed yet.
 ```
 id · projectId · agentId · ticketId? · taskType · instructions
 inputArtifactIds[] · availableToolIds[] · requiredOutputSchema ("<artifact_type>@<schemaVersion>")
-requiredCapabilities[] · preferredProvider · fallbackProviders[] · permissionLevel
-status · outputArtifactId · handoffId · requestedById · error? · createdAt · updatedAt · startedAt · completedAt
+requiredCapabilities[] · preferredProvider · fallbackProviders[] · executionPriority?
+permissionLevel · status · outputArtifactId · handoffId · requestedById · error?
+createdAt · updatedAt · startedAt · completedAt
 ```
+
+`executionPriority` is optional; `createJob` sets it to `agent.defaultPriority ?? "BALANCED"` at
+creation time, so it is copied truthfully even if the agent's own default later changes.
 
 Execution is requested with the job id only; the gateway builds the provider-neutral
 `ExecutionRequest` from server-side truth (`docs/EXECUTION-GATEWAY.md`).
@@ -98,9 +126,29 @@ QUEUED ──▶ RUNNING ──▶ WAITING_APPROVAL ──▶ COMPLETED
 
 Each provider attempt is an `AgentRun`: `jobId, providerId, model, attempt, status
 (RUNNING|SUCCEEDED|FAILED|FAILED_VALIDATION|SKIPPED), outputSummary, error, errorCategory, validation,
-latencyMs, tokens, startedAt, finishedAt`. A job that fell back has several runs. Runs are shown in the
-project **Runs** tab (agent, task, provider, status, duration, attempts, output artifact) and in the
-ticket drawer. The gateway also writes one `ExecutionLog` per attempt.
+latencyMs, inputTokens, outputTokens, totalTokens?, estimatedCostUsd?, selectionReason?, skillIds?,
+startedAt, finishedAt`. A job that fell back has several runs. Runs are shown in the project **Runs**
+tab (agent, task, provider, status, duration, attempts, output artifact) and in the ticket drawer's
+Execution history section (model, `selectionReason`, `totalTokens`/`estimatedCostUsd`, `skillIds` —
+see `docs/EXECUTION-GATEWAY.md`). The gateway also writes one `ExecutionLog` per attempt with the
+same optional fields.
+
+## Instruction packs and skills
+
+An agent's execution context can include APPROVED `Skill` rows (see `docs/SKILL-SYSTEM.md`):
+`approvedSkillsForAgent(data, agentId, agent.instructionPackIds ?? [])`
+(`src/services/skills.ts`) returns every APPROVED skill the agent owns (`ownerAgentIds`), reviews
+(`reviewerAgentIds`), or names explicitly in its own `instructionPackIds` — never a DRAFT, CANDIDATE
+or DEPRECATED one. `buildExecutionRequestFromData` (`src/services/agent-jobs.ts`) calls this and puts
+the result on `ExecutionRequest.activeSkills`; `toProviderRequest` renders it into a labelled
+"ACTIVE SKILLS (approved only — v...)" block in `systemContext`, separate from the DOCTRINE/AGENCY
+KNOWLEDGE/PROJECT FACTS/TASK CONTEXT sections. `skillProvenance()` turns the active skills into
+`"id@version"` strings recorded as `skillIds` on the resulting runs and execution logs.
+
+Two agents are seeded with an instruction pack: Agent 02 (`skill_ux_review_pack`, APPROVED) and
+Agent 03 (`skill_ct_visual_design`, still CANDIDATE — so it is *not* yet included in any execution
+context) and Agent 05 (`skill_ct_elementor_builder`, also CANDIDATE). See
+`docs/CT-VISUAL-DESIGN-SKILL.md` and `docs/CT-ELEMENTOR-BUILDER-SKILL.md`.
 
 ### What "Run Next Ticket" does now
 

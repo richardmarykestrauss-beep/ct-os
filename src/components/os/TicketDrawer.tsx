@@ -102,15 +102,29 @@ export function TicketDrawer({ ticketId, onClose }: { ticketId: string | null; o
                   <Section title="Execution history">
                     <ul className="grid gap-1">
                       {runs.map((r) => (
-                        <li key={r.id} className="flex items-center justify-between rounded-md border px-3 py-1.5 text-xs">
-                          <span className="text-ink">
-                            <span className="font-mono text-[11px] text-muted">#{r.attempt}</span> {PROVIDER_LABELS[r.providerId]}
-                            {r.error ? <span className="text-muted"> — {r.error}</span> : null}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            {r.latencyMs !== null ? <span className="font-mono text-[10px] text-muted">{r.latencyMs} ms</span> : null}
-                            <Badge tone={r.status === "SUCCEEDED" ? "ok" : r.status === "FAILED" ? "danger" : r.status === "FAILED_VALIDATION" ? "warn" : "neutral"}>{r.status.toLowerCase().replace("_", " ")}</Badge>
-                          </span>
+                        <li key={r.id} className="rounded-md border px-3 py-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-ink">
+                              <span className="font-mono text-[11px] text-muted">#{r.attempt}</span> {PROVIDER_LABELS[r.providerId]}
+                              {r.model ? <span className="font-mono text-[10px] text-muted"> · {r.model}</span> : null}
+                              {r.error ? <span className="text-muted"> — {r.error}</span> : null}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              {r.latencyMs !== null ? <span className="font-mono text-[10px] text-muted">{r.latencyMs} ms</span> : null}
+                              <Badge tone={r.status === "SUCCEEDED" ? "ok" : r.status === "FAILED" ? "danger" : r.status === "FAILED_VALIDATION" ? "warn" : "neutral"}>{r.status.toLowerCase().replace("_", " ")}</Badge>
+                            </span>
+                          </div>
+                          {r.selectionReason ? <div className="mt-0.5 text-[10.5px] text-muted">{r.selectionReason}</div> : null}
+                          {r.totalTokens != null || r.skillIds?.length ? (
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px] text-faint">
+                              {r.totalTokens != null ? (
+                                <span>
+                                  {r.totalTokens} tokens{r.estimatedCostUsd != null ? ` · ~$${r.estimatedCostUsd.toFixed(4)}` : ""}
+                                </span>
+                              ) : null}
+                              {r.skillIds?.length ? <span>skills: {r.skillIds.join(", ")}</span> : null}
+                            </div>
+                          ) : null}
                         </li>
                       ))}
                     </ul>

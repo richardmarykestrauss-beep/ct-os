@@ -123,9 +123,16 @@ export function TicketApprovalBadge({ state }: { state: TicketApprovalState }) {
   return <Badge tone={TICKET_APPROVAL_TONE[state]}>{TICKET_APPROVAL_LABEL[state]}</Badge>;
 }
 
-const PROVIDER_STATE: Record<"connected" | "not_configured" | "stub", { tone: Tone; label: string }> = {
+const PROVIDER_STATE: Record<
+  "connected" | "not_configured" | "unavailable" | "rate_limited" | "degraded" | "disabled" | "stub",
+  { tone: Tone; label: string }
+> = {
   connected: { tone: "ok", label: "Connected" },
   not_configured: { tone: "neutral", label: "Not configured" },
+  unavailable: { tone: "danger", label: "Unavailable" },
+  rate_limited: { tone: "warn", label: "Rate limited" },
+  degraded: { tone: "warn", label: "Degraded" },
+  disabled: { tone: "neutral", label: "Disabled" },
   stub: { tone: "outline", label: "Stub" },
 };
 
@@ -139,7 +146,11 @@ export function PermissionTierBadge({ tier }: { tier: "GREEN" | "AMBER" | "RED" 
   return <span className={cn("inline-flex rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold", TIER_CLS[tier])}>{tier}</span>;
 }
 
-export function ProviderStateBadge({ state }: { state: "connected" | "not_configured" | "stub" }) {
+export function ProviderStateBadge({
+  state,
+}: {
+  state: "connected" | "not_configured" | "unavailable" | "rate_limited" | "degraded" | "disabled" | "stub";
+}) {
   const s = PROVIDER_STATE[state];
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }

@@ -133,8 +133,18 @@ export type AgentStatus = "IDLE" | "WORKING" | "WAITING_APPROVAL" | "BLOCKED";
 
 export type ProviderId = "claude" | "openai" | "gemini";
 
-/** What a job needs from a provider; the router filters providers by these. */
-export type ProviderCapability = "text" | "structured_output" | "long_context" | "vision" | "code" | "review";
+/**
+ * What a job needs from a provider; the router filters providers by these (CTOS-003 Part E).
+ * "text" / "review" are CT-OS's original two; the rest were added so agent preferences can be
+ * expressed precisely (e.g. Agent 03 Creative Director → creative_generation + vision).
+ */
+export type ProviderCapability = "text" | "structured_output" | "long_context" | "vision" | "code" | "review" | "reasoning" | "fast_generation" | "creative_generation";
+
+/**
+ * How a job wants the router to weigh candidates when more than one is available (CTOS-003 Part F).
+ * BALANCED is the default when a job does not specify one — see `agent-jobs.ts#createJob`.
+ */
+export type ExecutionPriority = "QUALITY" | "BALANCED" | "COST" | "SPEED";
 
 /** Per-agent provider policy. The agent identity is stable even if every entry changes. */
 export interface AgentProviderPolicy {
@@ -172,6 +182,14 @@ export interface Agent {
   consumesArtifactTypes: ArtifactType[];
   /** Whether the agent may mutate a site. Agent 08 (Intelligence Curator) never builds. */
   canExecuteSiteChanges: boolean;
+  /** One-line "why this agent exists" — optional; only a few agents have one written yet (CTOS-003 Part I). */
+  mission?: string;
+  /** Things this agent explicitly must not do, beyond the permission model (CTOS-003 Part I). */
+  exclusions?: string[];
+  /** Default priority for jobs this agent creates when the job doesn't specify one (CTOS-003 Part F/I). */
+  defaultPriority?: ExecutionPriority;
+  /** APPROVED-only instruction packs (see Skill, kind "instruction_pack") this agent's jobs draw on (CTOS-003 Part I). */
+  instructionPackIds?: string[];
   createdAt: ISODate | null;
   updatedAt: ISODate | null;
 }
@@ -435,6 +453,8 @@ export interface AgentJob {
   requiredCapabilities: ProviderCapability[];
   preferredProvider: ProviderId;
   fallbackProviders: ProviderId[];
+  /** How the router should weigh candidates. Optional; treat as "BALANCED" when absent (CTOS-003 Part F). */
+  executionPriority?: ExecutionPriority;
   permissionLevel: PermissionLevel;
   status: AgentJobStatus;
   /** Set once a provider produced an accepted output artifact. */
@@ -493,6 +513,14 @@ export interface AgentRun {
   latencyMs: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  /** inputTokens + outputTokens when at least one is known (CTOS-003 Part G). Optional for backward compatibility. */
+  totalTokens?: number | null;
+  /** From a versioned pricing config (src/ai/pricing.ts); null whenever the model/provider isn't in it. Never a guess. */
+  estimatedCostUsd?: number | null;
+  /** Human-readable reason this provider was ranked/selected — see src/ai/ranking.ts (CTOS-003 Part F). */
+  selectionReason?: string | null;
+  /** APPROVED skill ids (as "id@version") active in context for this attempt (CTOS-003 Part L). */
+  skillIds?: string[];
   startedAt: ISODate | null;
   finishedAt: ISODate | null;
 }
@@ -674,13 +702,58 @@ export interface ExecutionLog {
   artifactId: string | null;
   errorCategory: ExecutionErrorCategory | null;
   errorMessage: string | null;
-  usage: { inputTokens: number | null; outputTokens: number | null } | null;
+  usage: { inputTokens: number | null; outputTokens: number | null; totalTokens?: number | null; estimatedCostUsd?: number | null } | null;
   latencyMs: number | null;
   requestedById: string | null;
   /** Provider output kept for diagnosis when validation failed. Never client-sensitive content beyond what the job already held. */
   rawOutput: unknown;
+  /** Why this provider was tried at this position — see src/ai/ranking.ts (CTOS-003 Part F). */
+  selectionReason?: string | null;
+  /** APPROVED skill ids (as "id@version") active in context for this attempt (CTOS-003 Part L). */
+  skillIds?: string[];
   startedAt: ISODate | null;
   finishedAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Skills and instruction packs (CTOS-003 Parts I, J, K, L)
+//
+// One versioned, approvable resource type covers two ticket concepts deliberately: an
+// "instruction pack" (Part I — reusable agent behaviour, e.g. Agent 02's UX review checklist)
+// and a "skill" (Parts J/K — CT Visual Design Skill, CT Elementor Builder Skill). Both are
+// "an approved body of text an agent's context may include"; giving them one lifecycle
+// (DRAFT → CANDIDATE → APPROVED → DEPRECATED) is the non-over-engineered reading of Part L,
+// which lists exactly one set of versioning/approval fields for "skills" in general.
+// ---------------------------------------------------------------------------
+
+export type SkillKind = "instruction_pack" | "design_review" | "build_practice" | "other";
+
+export type SkillStatus = "DRAFT" | "CANDIDATE" | "APPROVED" | "DEPRECATED" | "REJECTED";
+
+export interface Skill {
+  id: string;
+  name: string;
+  /** Monotonic per lineage (see supersedesId). Editing an APPROVED skill creates version + 1, not an in-place edit. */
+  version: number;
+  kind: SkillKind;
+  status: SkillStatus;
+  /** Free-text scope label, e.g. "agent-behaviour", "design-review", "build-practice". */
+  scope: string;
+  /** Agents this skill primarily belongs to. */
+  ownerAgentIds: string[];
+  /** Agents that may reference this skill without owning it (e.g. Agent 06 QA referencing Agent 03/05's skills). */
+  reviewerAgentIds: string[];
+  content: string;
+  /** Ticket codes, project names, artifact ids — whatever grounds the skill in real validated experience. */
+  evidence: string[];
+  /** Previous version's id in this lineage, or null for the first version. */
+  supersedesId: string | null;
+  /** Human who approved it. Never an agent — see services/skills.ts#approveSkill. */
+  approvedBy: string | null;
+  approvedById: string | null;
+  approvedAt: ISODate | null;
+  createdAt: ISODate | null;
+  updatedAt: ISODate | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -710,4 +783,5 @@ export interface OSData {
   projectIntegrations: ProjectIntegration[];
   jobApprovals: JobApproval[];
   executionLogs: ExecutionLog[];
+  skills: Skill[];
 }

@@ -15,6 +15,8 @@ import { NoProviderAvailableError, type ExecutionResult, type RouterAttempt, typ
 import { buildExecutionRequest, toProviderRequest, transitionJob, runsFromAttempts, type GatewayRecords } from "@/services/agent-jobs";
 import { createArtifact, createArtifactVersion } from "@/services/artifacts";
 import { checkPermission, effectiveLevel, type PermissionCheck } from "@/services/job-approvals";
+import { skillProvenance } from "@/services/skills";
+import { estimateCostUsd, totalTokensOf } from "@/ai/pricing";
 import { parseSchemaName } from "@/schemas/artifacts";
 import type { ProviderStatus } from "@/ai/registry";
 import type { GatewayStore, JobContext } from "./store";
@@ -127,11 +129,12 @@ async function executeClaimed(input: ExecuteInput, deps: GatewayDeps, ctx: JobCo
   }
   void claimId;
 
-  // 4. Envelope from approved knowledge only, then route.
+  // 4. Envelope from approved knowledge and APPROVED skills only, then route.
   const startedAt = now();
   const running = job.status === "RUNNING" ? job : transitionJob(snapshotWithJob(job), job.id, "RUNNING").job;
-  const request = toProviderRequest(buildExecutionRequest({ job: running, agent, inputArtifacts: ctx.inputArtifacts, knowledge: ctx.knowledge }));
-  log({ event: "execute.start", jobId: job.id, agent: agent.code, userId: user.id, level, preferred: job.preferredProvider, fallbacks: job.fallbackProviders, schema: job.requiredOutputSchema });
+  const request = toProviderRequest(buildExecutionRequest({ job: running, agent, inputArtifacts: ctx.inputArtifacts, knowledge: ctx.knowledge, skills: ctx.activeSkills }));
+  const skillIds = skillProvenance(ctx.activeSkills);
+  log({ event: "execute.start", jobId: job.id, agent: agent.code, userId: user.id, level, preferred: job.preferredProvider, fallbacks: job.fallbackProviders, schema: job.requiredOutputSchema, priority: request.executionPriority, skillIds });
 
   let routerResult: RouterResult | null = null;
   let failure: NoProviderAvailableError | Error | null = null;
@@ -143,8 +146,8 @@ async function executeClaimed(input: ExecuteInput, deps: GatewayDeps, ctx: JobCo
 
   // 5. Records.
   const attempts = routerResult ? routerResult.attempts : failure instanceof NoProviderAvailableError ? failure.attempts : [];
-  const runs = runsFromAttempts(running, attempts, routerResult, ctx.existingRunCount, () => newId("run"));
-  const logs = attempts.map((a, i) => attemptLog(ctx, newId, user, permission, a, runs[i]?.id ?? null, i));
+  const runs = runsFromAttempts(running, attempts, routerResult, ctx.existingRunCount, () => newId("run"), skillIds);
+  const logs = attempts.map((a, i) => attemptLog(ctx, newId, user, permission, a, runs[i]?.id ?? null, i, skillIds));
 
   if (routerResult) {
     const type = parseSchemaName(job.requiredOutputSchema).type;
@@ -180,6 +183,8 @@ async function executeClaimed(input: ExecuteInput, deps: GatewayDeps, ctx: JobCo
       error: null,
       attempts,
     };
+    // Per-attempt usage totals/estimated cost are recorded on runs and execution logs (see
+    // runsFromAttempts/attemptLog below); ExecutionResult.usage stays the raw provider figures.
     return { ok: true, result, records, permission, status: 200 };
   }
 
@@ -226,7 +231,7 @@ function minimalSnapshot(job: AgentJob, ctx: JobContext): OSData {
 
 const EMPTY: OSData = {
   clients: [], projects: [], phases: [], agents: [], pages: [], tickets: [], artifacts: [], qaItems: [], qaRuns: [], launchHolds: [], approvals: [], gates: [], activity: [],
-  agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [],
+  agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {
@@ -255,7 +260,7 @@ function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user
   };
 }
 
-function attemptLog(ctx: JobContext, newId: (p: string) => string, user: AuthUser, permission: PermissionCheck, a: RouterAttempt, runId: string | null, index: number): ExecutionLog {
+function attemptLog(ctx: JobContext, newId: (p: string) => string, user: AuthUser, permission: PermissionCheck, a: RouterAttempt, runId: string | null, index: number, skillIds: string[] = []): ExecutionLog {
   const validation: ValidationResult | null = a.validation;
   return baseLog(ctx, newId, a.startedAt, user, permission, {
     runId,
@@ -266,10 +271,12 @@ function attemptLog(ctx: JobContext, newId: (p: string) => string, user: AuthUse
     validation,
     errorCategory: a.errorCategory,
     errorMessage: a.error ?? null,
-    usage: a.usage,
+    usage: a.usage ? { ...a.usage, totalTokens: totalTokensOf(a.usage), estimatedCostUsd: estimateCostUsd(a.providerId, a.model, a.usage) } : null,
     latencyMs: a.latencyMs,
     // Raw output is kept only when validation failed, so the failure can be diagnosed.
     rawOutput: a.outcome === "failed_validation" ? (a.rawOutput ?? null) : null,
+    selectionReason: a.selectionReason ?? null,
+    skillIds,
     startedAt: a.startedAt,
     finishedAt: a.finishedAt,
   });

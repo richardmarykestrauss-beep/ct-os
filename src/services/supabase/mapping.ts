@@ -29,7 +29,8 @@ export type TableName =
   | "integrations"
   | "project_integrations"
   | "job_approvals"
-  | "execution_logs";
+  | "execution_logs"
+  | "skills";
 
 export interface TableSpec {
   table: TableName;
@@ -56,14 +57,15 @@ export const TABLES: TableSpec[] = [
   { table: "approvals", key: "approvals", nullable: ["decidedById", "decidedAt", "createdAt"] },
   { table: "activity_events", key: "activity", nullable: ["projectId", "actorId", "at"] },
   { table: "agent_jobs", key: "agentJobs", nullable: ["outputArtifactId", "handoffId", "requestedById", "createdAt", "updatedAt", "startedAt", "completedAt"] },
-  { table: "agent_runs", key: "agentRuns", nullable: ["model", "errorCategory", "validation", "latencyMs", "inputTokens", "outputTokens", "startedAt", "finishedAt"] },
+  { table: "agent_runs", key: "agentRuns", nullable: ["model", "errorCategory", "validation", "latencyMs", "inputTokens", "outputTokens", "totalTokens", "estimatedCostUsd", "selectionReason", "startedAt", "finishedAt"] },
   { table: "handoffs", key: "handoffs", nullable: ["outputArtifactId", "jobId", "runId", "createdAt", "updatedAt"] },
   { table: "knowledge_items", key: "knowledgeItems", nullable: ["projectId", "jobId", "proposedByAgentId", "reviewedBy", "reviewedById", "reviewedAt", "createdAt", "updatedAt"] },
   { table: "agent_lessons", key: "agentLessons", nullable: ["projectId", "sourceArtifactId", "sourceJobId", "reviewedBy", "reviewedById", "reviewedAt", "createdAt"] },
   { table: "integrations", key: "integrations", nullable: ["createdAt", "updatedAt"] },
   { table: "project_integrations", key: "projectIntegrations", nullable: ["credentialsRef", "createdAt", "updatedAt"] },
   { table: "job_approvals", key: "jobApprovals", nullable: ["approvedById", "approvedByName", "approvedByRole", "createdAt", "decidedAt", "consumedAt", "expiresAt"] },
-  { table: "execution_logs", key: "executionLogs", nullable: ["runId", "providerId", "model", "validation", "artifactId", "errorCategory", "errorMessage", "usage", "latencyMs", "requestedById", "rawOutput", "startedAt", "finishedAt"], serverOwned: true },
+  { table: "execution_logs", key: "executionLogs", nullable: ["runId", "providerId", "model", "validation", "artifactId", "errorCategory", "errorMessage", "usage", "latencyMs", "requestedById", "rawOutput", "selectionReason", "startedAt", "finishedAt"], serverOwned: true },
+  { table: "skills", key: "skills", nullable: ["supersedesId", "approvedBy", "approvedById", "approvedAt", "createdAt", "updatedAt"] },
 ];
 
 export function toSnake(key: string): string {

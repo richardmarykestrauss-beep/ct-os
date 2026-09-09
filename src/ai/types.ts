@@ -6,7 +6,8 @@
  * interfaces. The ExecutionRequest / ExecutionResult pair is the wire contract between the
  * frontend, the execution gateway and the ModelRouter — nothing provider-specific crosses it.
  */
-import type { AgentTaskType, ArtifactType, ExecutionErrorCategory, PermissionLevel, ProviderCapability, ProviderId, ValidationResult } from "@/data/types";
+import type { AgentTaskType, ArtifactType, ExecutionErrorCategory, ExecutionPriority, PermissionLevel, ProviderCapability, ProviderId, ValidationResult } from "@/data/types";
+import type { ActiveSkillRef } from "@/services/skills";
 
 // ---------------------------------------------------------------------------
 // Execution envelope (Part C)
@@ -54,8 +55,12 @@ export interface ExecutionRequest {
   preferredProvider: ProviderId;
   fallbackProviders: ProviderId[];
   requiredCapabilities: ProviderCapability[];
+  /** How the router should weigh candidates when more than one is available (CTOS-003 Part F). */
+  executionPriority: ExecutionPriority;
   permissionLevel: PermissionLevel;
   requestedById: string | null;
+  /** APPROVED skills only — see services/skills.ts#approvedSkillsForAgent (CTOS-003 Part L). */
+  activeSkills: ActiveSkillRef[];
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +125,21 @@ export interface ProviderResponse {
 
 export type ProviderAvailability = { available: true } | { available: false; reason: string };
 
-export type ProviderConnectionState = "connected" | "not_configured" | "stub";
+/**
+ * Health states a provider adapter or the router can report (CTOS-003 Part N). "stub" is CT-OS's
+ * own original state (a deterministic dev/local adapter, not a live one) and is kept distinct from
+ * the six the ticket asks for so a stub is never confused with a live provider having a problem:
+ *  - connected        — a credential is present and the adapter believes it's usable
+ *  - not_configured    — no credential in this environment
+ *  - unavailable       — a credential is present but the provider currently refuses it (e.g. bad
+ *                        key, suspended account) — distinct from "no credential at all"
+ *  - rate_limited      — the adapter's last call got an HTTP 429; still connected, temporarily throttled
+ *  - degraded          — the adapter's last call failed with a transient error (5xx / network) that
+ *                        isn't specifically a rate limit
+ *  - disabled          — turned off by policy (a settings/allow-list decision), regardless of credential
+ *  - stub              — deterministic, network-free adapter (local mode, tests, explicit dev opt-in)
+ */
+export type ProviderConnectionState = "connected" | "not_configured" | "unavailable" | "rate_limited" | "degraded" | "disabled" | "stub";
 
 export interface AIProvider {
   readonly id: ProviderId;
@@ -164,6 +183,8 @@ export interface RouterAttempt {
   latencyMs: number | null;
   /** Provider output when validation failed — kept for execution logs, never becomes an artifact. */
   rawOutput?: unknown;
+  /** Why this provider was ranked/tried here — see ai/ranking.ts (CTOS-003 Part F). Null for a skipped provider with no ranking entry. */
+  selectionReason?: string | null;
   startedAt: string;
   finishedAt: string;
 }
@@ -190,4 +211,6 @@ export class NoProviderAvailableError extends Error {
 export interface RoutingDecision {
   order: ProviderId[];
   excluded: { providerId: ProviderId; reason: string }[];
+  /** Human-readable "why" bullets per ordered candidate — see ai/ranking.ts (CTOS-003 Part F). */
+  reasons: Partial<Record<ProviderId, string[]>>;
 }

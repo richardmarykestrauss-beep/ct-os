@@ -8,6 +8,7 @@
  */
 import type { Agent, AgentJob, Artifact, JobApproval, KnowledgeItem, OSData, UserRole } from "@/data/types";
 import { knowledgeForJob } from "@/services/knowledge";
+import { approvedSkillsForAgent, type ActiveSkillRef } from "@/services/skills";
 import { applyGatewayRecords, type GatewayRecords } from "@/services/agent-jobs";
 import { parseSchemaName } from "@/schemas/artifacts";
 
@@ -17,6 +18,8 @@ export interface JobContext {
   inputArtifacts: Artifact[];
   /** APPROVED knowledge for this project/job only. */
   knowledge: KnowledgeItem[];
+  /** APPROVED skills only (CTOS-003 Part L) — see services/skills.ts#approvedSkillsForAgent. */
+  activeSkills: ActiveSkillRef[];
   approvals: JobApproval[];
   /** The current non-superseded output for this job's lineage (to version), if any. */
   previousOutput: Artifact | null;
@@ -70,6 +73,7 @@ export class OSDataGatewayStore implements GatewayStore {
       agent,
       inputArtifacts: job.inputArtifactIds.map((id) => d.artifacts.find((a) => a.id === id)).filter((a): a is Artifact => !!a),
       knowledge: knowledgeForJob(d, job.projectId, job.id),
+      activeSkills: approvedSkillsForAgent(d, job.agentId, agent.instructionPackIds ?? []),
       approvals: d.jobApprovals.filter((a) => a.jobId === jobId),
       previousOutput: job.ticketId ? (d.artifacts.find((a) => a.jobId && a.type === type && a.projectId === job.projectId && a.ticketId === job.ticketId && a.status !== "SUPERSEDED") ?? null) : null,
       existingRunCount: d.agentRuns.filter((r) => r.jobId === jobId).length,

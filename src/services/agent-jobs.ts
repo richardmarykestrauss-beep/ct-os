@@ -6,7 +6,7 @@
  * artifacts and handoffs. Functions are pure (OSData in → OSData out) except `executeJob`,
  * which awaits the router and then applies a pure result step.
  */
-import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, Artifact, ArtifactType, ExecutionLog, Handoff, JobApproval, KnowledgeItem, OSData, Ticket } from "@/data/types";
+import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, Artifact, ArtifactType, ExecutionLog, ExecutionPriority, Handoff, JobApproval, KnowledgeItem, OSData, Ticket } from "@/data/types";
 import type { ModelRouter } from "@/ai/router";
 import type { ApprovedKnowledge, ExecutionRequest, ProviderRequest, RouterAttempt, RouterResult } from "@/ai/types";
 import { NoProviderAvailableError } from "@/ai/types";
@@ -14,6 +14,8 @@ import { isSchemaName, jsonSchemaFor, parseSchemaName } from "@/schemas/artifact
 import { createArtifact, createArtifactVersion, latestArtifact, outputSchemaFor, setArtifactStatus } from "./artifacts";
 import { createHandoff, transitionHandoff } from "./handoffs";
 import { clearTaskKnowledge, knowledgeForJob } from "./knowledge";
+import { approvedSkillsForAgent, type ActiveSkillRef } from "./skills";
+import { estimateCostUsd, totalTokensOf } from "@/ai/pricing";
 import { newId, nowIso } from "@/lib/core";
 
 // ---------------------------------------------------------------------------
@@ -71,6 +73,8 @@ export interface CreateJobInput {
   availableToolIds?: string[];
   outputArtifactType?: ArtifactType;
   requestedById?: string | null;
+  /** Defaults to the agent's own `defaultPriority`, or "BALANCED" if the agent doesn't set one (CTOS-003 Part F). */
+  executionPriority?: ExecutionPriority;
   id?: string;
   at?: string;
 }
@@ -99,6 +103,7 @@ export function createJob(data: OSData, input: CreateJobInput): { data: OSData; 
     requiredCapabilities: agent.requiredCapabilities,
     preferredProvider: agent.providerPolicy.preferred,
     fallbackProviders: agent.providerPolicy.fallbacks,
+    executionPriority: input.executionPriority ?? agent.defaultPriority ?? "BALANCED",
     permissionLevel: agent.permissionLevel,
     status: "QUEUED",
     outputArtifactId: null,
@@ -180,7 +185,8 @@ export function cancelJob(data: OSData, jobId: string, reason?: string) {
 // Runs
 // ---------------------------------------------------------------------------
 
-export function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], result: RouterResult | null, existingCount: number, idFor: (i: number) => string = () => newId("run")): AgentRun[] {
+/** Skill provenance shared by every run/log this execution produces — computed once by the caller (CTOS-003 Part L). */
+export function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], result: RouterResult | null, existingCount: number, idFor: (i: number) => string = () => newId("run"), skillIds: string[] = []): AgentRun[] {
   return attempts.map((a, i) => ({
     id: idFor(i),
     jobId: job.id,
@@ -197,6 +203,10 @@ export function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], resul
     latencyMs: a.latencyMs,
     inputTokens: a.usage?.inputTokens ?? null,
     outputTokens: a.usage?.outputTokens ?? null,
+    totalTokens: totalTokensOf(a.usage),
+    estimatedCostUsd: estimateCostUsd(a.providerId, a.model, a.usage),
+    selectionReason: a.selectionReason ?? null,
+    skillIds,
     startedAt: a.startedAt,
     finishedAt: a.finishedAt,
   }));
@@ -225,9 +235,11 @@ export interface EnvelopeInputs {
   inputArtifacts: Artifact[];
   /** Already filtered to APPROVED items relevant to the project/job. */
   knowledge: KnowledgeItem[];
+  /** APPROVED skills only — see services/skills.ts#approvedSkillsForAgent. Defaults to none. */
+  skills?: ActiveSkillRef[];
 }
 
-export function buildExecutionRequest({ job, agent, inputArtifacts, knowledge }: EnvelopeInputs): ExecutionRequest {
+export function buildExecutionRequest({ job, agent, inputArtifacts, knowledge, skills = [] }: EnvelopeInputs): ExecutionRequest {
   return {
     jobId: job.id,
     projectId: job.projectId,
@@ -242,9 +254,11 @@ export function buildExecutionRequest({ job, agent, inputArtifacts, knowledge }:
     schemaVersion: parseSchemaName(job.requiredOutputSchema).version,
     preferredProvider: job.preferredProvider,
     fallbackProviders: job.fallbackProviders,
+    executionPriority: job.executionPriority ?? "BALANCED",
     requiredCapabilities: job.requiredCapabilities,
     permissionLevel: job.permissionLevel,
     requestedById: job.requestedById,
+    activeSkills: skills,
   };
 }
 
@@ -252,13 +266,17 @@ export function buildExecutionRequest({ job, agent, inputArtifacts, knowledge }:
 export function buildExecutionRequestFromData(data: OSData, job: AgentJob): ExecutionRequest {
   const agent = getAgent(data, job.agentId);
   const inputArtifacts = job.inputArtifactIds.map((id) => data.artifacts.find((a) => a.id === id)).filter((a): a is Artifact => !!a);
-  return buildExecutionRequest({ job, agent, inputArtifacts, knowledge: knowledgeForJob(data, job.projectId, job.id) });
+  const skills = approvedSkillsForAgent(data, job.agentId, agent.instructionPackIds ?? []);
+  return buildExecutionRequest({ job, agent, inputArtifacts, knowledge: knowledgeForJob(data, job.projectId, job.id), skills });
 }
 
-/** Adds the assembled system context and output JSON schema. Sections are labelled so doctrine, agency patterns and project facts never blur. */
+/** Adds the assembled system context and output JSON schema. Sections are labelled so doctrine, agency patterns, project facts and skills never blur. */
 export function toProviderRequest(req: ExecutionRequest): ProviderRequest {
   const k = req.approvedKnowledge;
   const section = (label: string, items: { title: string; content: string }[]) => (items.length ? `${label}:\n${items.map((i) => `- ${i.title}: ${i.content}`).join("\n")}` : `${label}: none`);
+  const skillsSection = req.activeSkills.length
+    ? `ACTIVE SKILLS (approved only — v${req.activeSkills.map((s) => s.version).join(", v")}):\n${req.activeSkills.map((s) => `- ${s.name} (v${s.version}): ${s.content}`).join("\n")}`
+    : "ACTIVE SKILLS: none";
   const systemContext = [
     `You are ${req.agent.code} ${req.agent.name} — ${req.agent.role}, an agent of Creative Touch Website OS. Responsibilities: ${req.agent.responsibilities.join(", ")}.`,
     `Permission level for this job: ${req.permissionLevel}. You may not exceed it. You never mutate live systems yourself; you produce a structured artifact for human review.`,
@@ -266,6 +284,7 @@ export function toProviderRequest(req: ExecutionRequest): ProviderRequest {
     section("AGENCY KNOWLEDGE (validated patterns)", k.agency),
     section("PROJECT FACTS (this client/project only)", k.project),
     section("TASK CONTEXT (this job only)", k.task),
+    skillsSection,
     `Output contract: return exactly one JSON object satisfying "${req.requiredOutputSchema}".`,
   ].join("\n\n");
   return { ...req, systemContext, outputJsonSchema: isSchemaName(req.requiredOutputSchema) ? jsonSchemaFor(req.requiredOutputSchema) : null };

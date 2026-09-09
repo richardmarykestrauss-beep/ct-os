@@ -4,8 +4,9 @@ import { PageHeader, SectionTitle } from "@/components/os/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { KnowledgeItem, KnowledgeScope, KnowledgeStatus } from "@/data/types";
+import type { KnowledgeItem, KnowledgeScope, KnowledgeStatus, Skill, SkillStatus } from "@/data/types";
 import { KNOWLEDGE_SCOPES } from "@/services/knowledge";
+import { SKILL_KIND_LABELS, SKILL_STATUS_LABELS } from "@/services/skills";
 import { agentById, useOS } from "@/state/os-store";
 import { cn, formatRelative } from "@/lib/utils";
 import { BookOpen, Check, X } from "lucide-react";
@@ -16,6 +17,9 @@ type Filter = "candidates" | "approved" | "all";
 
 const STATUS_TONE: Record<KnowledgeStatus, "warn" | "ok" | "danger" | "neutral"> = { CANDIDATE: "warn", APPROVED: "ok", REJECTED: "danger", DEPRECATED: "neutral" };
 const STATUS_LABEL: Record<KnowledgeStatus, string> = { CANDIDATE: "Candidate", APPROVED: "Approved", REJECTED: "Rejected", DEPRECATED: "Deprecated" };
+
+const SKILL_STATUS_TONE: Record<SkillStatus, "neutral" | "warn" | "ok" | "danger"> = { DRAFT: "neutral", CANDIDATE: "warn", APPROVED: "ok", DEPRECATED: "neutral", REJECTED: "danger" };
+const SKILL_TABS: SkillStatus[] = ["DRAFT", "CANDIDATE", "APPROVED", "DEPRECATED"];
 
 function KnowledgePage() {
   const { data, actions } = useOS();
@@ -81,7 +85,73 @@ function KnowledgePage() {
       <p className="flex items-center gap-1.5 text-[11px] text-muted">
         <BookOpen className="size-3.5" /> Approving records you as the reviewer. Agents cannot approve, and nothing here is sent to a provider until the item is approved.
       </p>
+
+      <SectionTitle className="mt-6" right={<span className="text-[11px] text-muted">Reusable instruction packs and reviewed design/build skills (CTOS-003)</span>}>
+        Skills
+      </SectionTitle>
+      <SkillsPanel />
     </>
+  );
+}
+
+function SkillsPanel() {
+  const { data } = useOS();
+  const [tab, setTab] = React.useState<SkillStatus>("CANDIDATE");
+  const bySkillStatus = data.skills.filter((s) => s.status === tab);
+  return (
+    <>
+      <div className="mb-3 flex flex-wrap gap-1">
+        {SKILL_TABS.map((s) => (
+          <button key={s} onClick={() => setTab(s)} className={cn("rounded-md border px-2 py-0.5 text-xs", tab === s ? "border-accent bg-accent-soft text-accent-strong" : "border-border bg-surface text-muted hover:text-ink")}>
+            {SKILL_STATUS_LABELS[s]} <span className="num ml-1">{data.skills.filter((x) => x.status === s).length}</span>
+          </button>
+        ))}
+      </div>
+      {bySkillStatus.length ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {bySkillStatus.map((s) => (
+            <SkillCard key={s.id} skill={s} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed bg-surface px-4 py-6 text-center text-xs text-muted">No {SKILL_STATUS_LABELS[tab].toLowerCase()} skills.</div>
+      )}
+    </>
+  );
+}
+
+function SkillCard({ skill }: { skill: Skill }) {
+  const { data } = useOS();
+  const owners = skill.ownerAgentIds.map((id) => agentById(data, id)?.shortCode ?? id).join(", ");
+  const reviewers = skill.reviewerAgentIds.map((id) => agentById(data, id)?.shortCode ?? id).join(", ");
+  return (
+    <Card className="px-4 py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[13px] font-semibold text-ink">
+          {skill.name} <span className="font-mono text-[11px] text-muted">v{skill.version}</span>
+        </div>
+        <Badge tone={SKILL_STATUS_TONE[skill.status]}>{SKILL_STATUS_LABELS[skill.status]}</Badge>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+        <Badge tone="outline">{SKILL_KIND_LABELS[skill.kind]}</Badge>
+        <span>· scope: {skill.scope}</span>
+        {owners ? <span>· owner: {owners}</span> : null}
+        {reviewers ? <span>· reviewer: {reviewers}</span> : null}
+      </div>
+      <p className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-ink-2">{skill.content}</p>
+      {skill.evidence.length ? (
+        <div className="mt-2 text-[11px] text-muted">
+          Evidence: <span className="font-mono text-ink-2">{skill.evidence.join(" · ")}</span>
+        </div>
+      ) : null}
+      {skill.approvedBy ? (
+        <div className="mt-2 text-[11px] text-muted">
+          Approved by {skill.approvedBy} {skill.approvedAt ? `· ${formatRelative(skill.approvedAt)}` : ""}
+        </div>
+      ) : (
+        <div className="mt-2 text-[11px] text-faint">Only a human (Admin or Production Lead) can approve — see Settings for who can review.</div>
+      )}
+    </Card>
   );
 }
 

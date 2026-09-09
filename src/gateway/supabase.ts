@@ -6,7 +6,7 @@
  * drives the tests. The service-role key is held by the client instance the runtime wrapper
  * creates — it is never read here and never leaves the server.
  */
-import type { Agent, AgentJob, Artifact, AuthUser, Handoff, JobApproval, KnowledgeItem, UserRole } from "@/data/types";
+import type { Agent, AgentJob, Artifact, AuthUser, Handoff, JobApproval, KnowledgeItem, Skill, UserRole } from "@/data/types";
 import type { GatewayRecords } from "@/services/agent-jobs";
 import { fromRow, specFor, toRow, type Row } from "@/services/supabase/mapping";
 import { parseSchemaName } from "@/schemas/artifacts";
@@ -80,7 +80,14 @@ export class SupabaseGatewayStore implements GatewayStore {
     }
     const existingRunCount = (await this.db.select("agent_runs", [{ column: "job_id", op: "eq", value: jobId }])).length;
     const handoff = job.handoffId ? ((await this.db.select("handoffs", [{ column: "id", op: "eq", value: job.handoffId }])).map((r) => fromRow<Handoff>(specFor("handoffs"), r))[0] ?? null) : null;
-    return { job, agent, inputArtifacts, knowledge, approvals, previousOutput, existingRunCount, handoff };
+    // Only APPROVED skills ever reach a job's context (CTOS-003 Part L); the agent-relevance filter
+    // (owner/reviewer/instruction-pack) happens client-side since GatewayDb has no OR filter.
+    const approvedSkills = (await this.db.select("skills", [{ column: "status", op: "eq", value: "APPROVED" }])).map((r) => fromRow<Skill>(specFor("skills"), r));
+    const packIds = agent.instructionPackIds ?? [];
+    const activeSkills = approvedSkills
+      .filter((s) => s.ownerAgentIds.includes(job.agentId) || s.reviewerAgentIds.includes(job.agentId) || packIds.includes(s.id))
+      .map((s) => ({ id: s.id, name: s.name, version: s.version, kind: s.kind, content: s.content }));
+    return { job, agent, inputArtifacts, knowledge, activeSkills, approvals, previousOutput, existingRunCount, handoff };
   }
 
   async getUserRole(userId: string): Promise<UserRole | null> {
