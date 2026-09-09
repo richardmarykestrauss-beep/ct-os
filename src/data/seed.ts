@@ -971,4 +971,6 @@ export const seedData: OSData = {
   jobApprovals: [],
   executionLogs: [],
   skills,
+  externalClients: [],
+  externalAccessLog: [],
 };

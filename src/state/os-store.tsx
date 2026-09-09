@@ -26,7 +26,7 @@ import type {
   TicketApprovalState,
   TicketStatus,
 } from "@/data/types";
-import type { ActorRef, AgentProviderPolicy, AuthUser, KnowledgeScope, QARun } from "@/data/types";
+import type { ActorRef, AgentProviderPolicy, AuthUser, ExternalClientType, ExternalPermissionCeiling, KnowledgeScope, QARun } from "@/data/types";
 import { PHASES, PROJECT_STATE_LABELS, STATE_PROGRESS, canTransition } from "@/data/state-machine";
 import { AGENT_IDS } from "@/data/seed";
 import { InMemoryRepository, type OSRepository, type RepositoryChoice } from "@/services/repository";
@@ -34,6 +34,7 @@ import { createArtifact } from "@/services/artifacts";
 import { applyGatewayRecords, approveJobOutput, cancelJob, createJobForTicket, requestJobRevision, startJob } from "@/services/agent-jobs";
 import { authorizeRedJob, checkPermission, decideJobApproval, effectiveLevel, requestJobApproval, type PermissionCheck } from "@/services/job-approvals";
 import { proposeLesson, reviewKnowledgeItem, type ProposeLessonInput, type ReviewDecision } from "@/services/knowledge";
+import { createExternalClient, generateExternalClientToken, revokeExternalClient, rotateExternalClientToken, setExternalClientStatus, type ExternalClientActor } from "@/services/external-clients";
 import { PROVIDER_LABELS } from "@/ai/registry";
 import type { GatewayClient } from "@/gateway/client";
 import { EmbeddedGatewayClient } from "@/gateway/client";
@@ -72,7 +73,11 @@ type Action =
   | { type: "AUTHORIZE_JOB"; jobId: string; actor: AuthUser }
   | { type: "TOGGLE_HOLD"; holdId: string; actor: AuthUser }
   | { type: "SET_QA_ITEM_STATUS"; qaItemId: string; status: QAItem["status"]; actor: AuthUser }
-  | { type: "NOTE"; projectId: string | null; message: string; actor: AuthUser };
+  | { type: "NOTE"; projectId: string | null; message: string; actor: AuthUser }
+  | { type: "CREATE_EXTERNAL_CLIENT"; id: string; rawToken: string; name: string; clientType: ExternalClientType; permissionCeiling: ExternalPermissionCeiling; actor: AuthUser }
+  | { type: "SET_EXTERNAL_CLIENT_STATUS"; clientId: string; status: "ACTIVE" | "DISABLED"; actor: AuthUser }
+  | { type: "ROTATE_EXTERNAL_CLIENT_TOKEN"; clientId: string; rawToken: string; actor: AuthUser }
+  | { type: "REVOKE_EXTERNAL_CLIENT"; clientId: string; actor: AuthUser };
 
 function ref(user: AuthUser): ActorRef {
   return { id: user.id, name: user.displayName };
@@ -453,6 +458,46 @@ function reducer(data: OSData, action: Action): OSData {
       }
     }
 
+    case "CREATE_EXTERNAL_CLIENT": {
+      try {
+        const toExternalActor = (u: AuthUser): ExternalClientActor => ({ kind: "human", id: u.id, name: u.displayName, role: u.role });
+        const r = createExternalClient(data, toExternalActor(action.actor), { id: action.id, rawToken: action.rawToken, name: action.name, type: action.clientType, permissionCeiling: action.permissionCeiling });
+        return { ...r.data, activity: pushActivity(r.data, null, "NOTE", `External assistant registered - ${r.client.name} [${r.client.permissionCeiling}]`, undefined, ref(action.actor)) };
+      } catch {
+        return data;
+      }
+    }
+
+    case "SET_EXTERNAL_CLIENT_STATUS": {
+      try {
+        const toExternalActor = (u: AuthUser): ExternalClientActor => ({ kind: "human", id: u.id, name: u.displayName, role: u.role });
+        const r = setExternalClientStatus(data, toExternalActor(action.actor), action.clientId, action.status);
+        return { ...r.data, activity: pushActivity(r.data, null, "NOTE", `External assistant ${action.status === "ACTIVE" ? "enabled" : "disabled"} - ${r.client.name}`, undefined, ref(action.actor)) };
+      } catch {
+        return data;
+      }
+    }
+
+    case "ROTATE_EXTERNAL_CLIENT_TOKEN": {
+      try {
+        const toExternalActor = (u: AuthUser): ExternalClientActor => ({ kind: "human", id: u.id, name: u.displayName, role: u.role });
+        const r = rotateExternalClientToken(data, toExternalActor(action.actor), action.clientId, action.rawToken);
+        return { ...r.data, activity: pushActivity(r.data, null, "NOTE", `External assistant credential rotated - ${r.client.name}`, undefined, ref(action.actor)) };
+      } catch {
+        return data;
+      }
+    }
+
+    case "REVOKE_EXTERNAL_CLIENT": {
+      try {
+        const toExternalActor = (u: AuthUser): ExternalClientActor => ({ kind: "human", id: u.id, name: u.displayName, role: u.role });
+        const r = revokeExternalClient(data, toExternalActor(action.actor), action.clientId);
+        return { ...r.data, activity: pushActivity(r.data, null, "NOTE", `External assistant revoked - ${r.client.name}`, undefined, ref(action.actor)) };
+      } catch {
+        return data;
+      }
+    }
+
     case "PROPOSE_LESSON": {
       try {
         const r = proposeLesson(data, action.input);
@@ -565,6 +610,10 @@ interface OSStoreValue {
     proposeLesson: (input: ProposeLessonInput) => void;
     setAgentProvider: (agentId: string, policy: Partial<AgentProviderPolicy>) => void;
     note: (projectId: string | null, message: string) => void;
+    createExternalClient: (input: { name: string; type: ExternalClientType; permissionCeiling: ExternalPermissionCeiling }) => { id: string; rawToken: string };
+    setExternalClientStatus: (clientId: string, status: "ACTIVE" | "DISABLED") => void;
+    rotateExternalClientToken: (clientId: string) => { rawToken: string };
+    revokeExternalClient: (clientId: string) => void;
   };
 }
 
@@ -716,6 +765,19 @@ function OSStoreInner({ children, repository, initial, reason, user, gateway }: 
       proposeLesson: (input) => dispatch({ type: "PROPOSE_LESSON", input, actor: actor() }),
       setAgentProvider: (agentId, policy) => dispatch({ type: "SET_AGENT_PROVIDER", agentId, policy, actor: actor() }),
       note: (projectId, message) => dispatch({ type: "NOTE", projectId, message, actor: actor() }),
+      createExternalClient: (input) => {
+        const id = newId("ext");
+        const rawToken = generateExternalClientToken();
+        dispatch({ type: "CREATE_EXTERNAL_CLIENT", id, rawToken, name: input.name, clientType: input.type, permissionCeiling: input.permissionCeiling, actor: actor() });
+        return { id, rawToken };
+      },
+      setExternalClientStatus: (clientId, status) => dispatch({ type: "SET_EXTERNAL_CLIENT_STATUS", clientId, status, actor: actor() }),
+      rotateExternalClientToken: (clientId) => {
+        const rawToken = generateExternalClientToken();
+        dispatch({ type: "ROTATE_EXTERNAL_CLIENT_TOKEN", clientId, rawToken, actor: actor() });
+        return { rawToken };
+      },
+      revokeExternalClient: (clientId) => dispatch({ type: "REVOKE_EXTERNAL_CLIENT", clientId, actor: actor() }),
     };
   }, [gatewayClient, repository]);
 

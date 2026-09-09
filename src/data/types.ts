@@ -757,6 +757,73 @@ export interface Skill {
 }
 
 // ---------------------------------------------------------------------------
+// External assistant access (CTOS-004) - controlled MCP tool bridge
+//
+// An ExternalClient is a registered identity for an outside assistant (ChatGPT, another Claude
+// session, a future automation) that talks to CT-OS only through the MCP tool layer, never the
+// database directly. It carries its own permission ceiling - separate from, and always at or
+// below, the CT-OS human/agent permission model - and every tool call it makes is written to
+// externalAccessLog. See src/mcp/ and docs/MCP-BRIDGE.md.
+// ---------------------------------------------------------------------------
+
+export type ExternalClientType = "chatgpt" | "claude" | "automation" | "other";
+
+export type ExternalClientStatus = "ACTIVE" | "DISABLED" | "REVOKED";
+
+/**
+ * The maximum a client may do WITHOUT a human in the loop:
+ *  - READ_ONLY: read tools only, no writes of any kind.
+ *  - GREEN_WRITE: read tools + the safe structured write tools (ticket.create, ticket.comment,
+ *    client_feedback.add, knowledge.propose - always CANDIDATE, agent_job.request - GREEN jobs
+ *    only enter the queue automatically).
+ * AMBER and RED are never a ceiling value: every external client, at any ceiling, may only ever
+ * CREATE an AMBER approval request or a RED authorization request - it can never decide/self-approve
+ * one, and a RED job it requests is left QUEUED with no execution until a human authorizes it in
+ * CT-OS itself. This is enforced in src/mcp/registry.ts and src/services/external-clients.ts, not
+ * just documented here.
+ */
+export type ExternalPermissionCeiling = "READ_ONLY" | "GREEN_WRITE";
+
+export interface ExternalClient {
+  id: string;
+  name: string;
+  type: ExternalClientType;
+  status: ExternalClientStatus;
+  permissionCeiling: ExternalPermissionCeiling;
+  /** null = every tool the ceiling allows; otherwise an explicit allow-list of MCP tool names. */
+  allowedTools: string[] | null;
+  /** SHA-256 of the local bearer token. The raw token is shown once at creation and never stored. */
+  tokenHash: string | null;
+  /** First 8 chars of the raw token, kept only for identification in the UI/logs (never enough to authenticate). */
+  tokenPrefix: string | null;
+  /** Human (ADMIN/PRODUCTION_LEAD) who created this identity. Never an agent. */
+  createdById: string | null;
+  createdAt: ISODate | null;
+  updatedAt: ISODate | null;
+  lastUsedAt: ISODate | null;
+  revokedAt: ISODate | null;
+}
+
+export type ExternalAccessResult = "allowed" | "denied" | "error";
+
+/** One MCP tool call, recorded regardless of outcome - the audit trail Part D/L require. */
+export interface ExternalAccessLogEntry {
+  id: string;
+  at: ISODate | null;
+  externalClientId: string;
+  externalClientName: string;
+  tool: string;
+  projectId: string | null;
+  /** Authenticated CT-OS user/session this call is acting alongside, when one exists. Never implied. */
+  ctosUserId: string | null;
+  requestedAction: string;
+  /** "READ" for a read tool; the job/approval permission tier for a write tool; null when the call never reached a tier decision. */
+  permissionTier: PermissionLevel | "READ" | null;
+  result: ExternalAccessResult;
+  reason?: string;
+  createdIds?: string[];
+}
+// ---------------------------------------------------------------------------
 // Aggregate store shape (what a repository returns)
 // ---------------------------------------------------------------------------
 
@@ -784,4 +851,6 @@ export interface OSData {
   jobApprovals: JobApproval[];
   executionLogs: ExecutionLog[];
   skills: Skill[];
+  externalClients: ExternalClient[];
+  externalAccessLog: ExternalAccessLogEntry[];
 }

@@ -231,7 +231,7 @@ function minimalSnapshot(job: AgentJob, ctx: JobContext): OSData {
 
 const EMPTY: OSData = {
   clients: [], projects: [], phases: [], agents: [], pages: [], tickets: [], artifacts: [], qaItems: [], qaRuns: [], launchHolds: [], approvals: [], gates: [], activity: [],
-  agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [],
+  agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [], externalClients: [], externalAccessLog: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {

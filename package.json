@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Creative Touch Website OS \u2014 internal AI-assisted website production control plane (MVP)",
+  "description": "Creative Touch Website OS — internal AI-assisted website production control plane (MVP)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -14,10 +14,13 @@
     "verify": "npm run typecheck && npm run test && npm run security:scan",
     "security:scan": "node scripts/security-scan.mjs",
     "gateway:check": "npx --yes deno check --config supabase/functions/agent-execute/deno.json supabase/functions/agent-execute/index.ts && npm run gateway:bundle && npx --yes deno check --no-config supabase/functions/agent-execute/dist/index.js",
-    "gateway:bundle": "node scripts/bundle-edge-function.mjs"
+    "gateway:bundle": "node scripts/bundle-edge-function.mjs",
+    "mcp:build": "node scripts/bundle-mcp-server.mjs",
+    "mcp:start": "node dist/mcp-server/index.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-progress": "^1.1.7",

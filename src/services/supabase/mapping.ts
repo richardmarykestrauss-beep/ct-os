@@ -30,7 +30,9 @@ export type TableName =
   | "project_integrations"
   | "job_approvals"
   | "execution_logs"
-  | "skills";
+  | "skills"
+  | "external_clients"
+  | "external_access_log";
 
 export interface TableSpec {
   table: TableName;
@@ -66,6 +68,8 @@ export const TABLES: TableSpec[] = [
   { table: "job_approvals", key: "jobApprovals", nullable: ["approvedById", "approvedByName", "approvedByRole", "createdAt", "decidedAt", "consumedAt", "expiresAt"] },
   { table: "execution_logs", key: "executionLogs", nullable: ["runId", "providerId", "model", "validation", "artifactId", "errorCategory", "errorMessage", "usage", "latencyMs", "requestedById", "rawOutput", "selectionReason", "startedAt", "finishedAt"], serverOwned: true },
   { table: "skills", key: "skills", nullable: ["supersedesId", "approvedBy", "approvedById", "approvedAt", "createdAt", "updatedAt"] },
+  { table: "external_clients", key: "externalClients", nullable: ["allowedTools", "tokenHash", "tokenPrefix", "createdById", "createdAt", "updatedAt", "lastUsedAt", "revokedAt"] },
+  { table: "external_access_log", key: "externalAccessLog", nullable: ["at", "projectId", "ctosUserId", "permissionTier"] },
 ];
 
 export function toSnake(key: string): string {
