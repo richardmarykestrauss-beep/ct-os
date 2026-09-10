@@ -51,7 +51,7 @@ class CTOS_Elementor {
      *   elementor_data: mixed[]
      * }|WP_Error
      */
-    public static function get_document( int $post_id ): array|WP_Error {
+    public static function get_document( int $post_id ) {
         $post = get_post( $post_id );
         if ( ! $post || ! in_array( $post->post_type, [ 'page', 'post' ], true ) ) {
             return new WP_Error(
@@ -110,7 +110,7 @@ class CTOS_Elementor {
         int    $post_id,
         array  $patch,
         string $expected_hash
-    ): array|WP_Error {
+    ) {
         // Load current state.
         $current = self::get_document( $post_id );
         if ( is_wp_error( $current ) ) {
@@ -241,7 +241,7 @@ class CTOS_Elementor {
         string $snapshot_hash,
         string $expected_current_hash,
         array  $elementor_data
-    ): array|WP_Error {
+    ) {
         // Load current state.
         $current = self::get_document( $post_id );
         if ( is_wp_error( $current ) ) {
@@ -325,20 +325,21 @@ class CTOS_Elementor {
         string $operation,
         string $actual_type,
         ?string $key,
-        mixed  $value
-    ): array|WP_Error {
+        $value
+    ) {
         switch ( $operation ) {
             case 'SET_WIDGET_TEXT':
                 $text = is_string( $value ) ? $value : (string) $value;
                 if ( self::detect_unsafe_content( $text ) ) {
                     return new WP_Error( 'unsafe_content', 'Value contains unsafe HTML or script content.', [ 'status' => 400 ] );
                 }
-                $text_key = match ( $actual_type ) {
-                    'heading' => 'title',
-                    'text'    => 'editor',
-                    'button'  => 'button_text',
-                    default   => 'title',
-                };
+                if ( $actual_type === 'text' ) {
+                    $text_key = 'editor';
+                } elseif ( $actual_type === 'button' ) {
+                    $text_key = 'button_text';
+                } else {
+                    $text_key = 'title';
+                }
                 $node['settings'][ $text_key ] = $text;
                 return $node;
 
@@ -436,13 +437,13 @@ class CTOS_Elementor {
         $widget_type = $node['widgetType'] ?? '';
 
         if ( $el_type === 'widget' ) {
-            return match ( $widget_type ) {
-                'heading'     => 'heading',
-                'text-editor' => 'text',
-                'button'      => 'button',
-                'image'       => 'image',
-                default       => 'unknown',
-            };
+            switch ( $widget_type ) {
+                case 'heading':     return 'heading';
+                case 'text-editor': return 'text';
+                case 'button':      return 'button';
+                case 'image':       return 'image';
+                default:            return 'unknown';
+            }
         }
 
         if ( in_array( $el_type, [ 'container', 'section', 'column', 'inner-section' ], true ) ) {
@@ -460,7 +461,7 @@ class CTOS_Elementor {
         }
         // Reject dangerous schemes.
         foreach ( [ 'javascript:', 'data:', 'vbscript:', 'file:', 'about:' ] as $scheme ) {
-            if ( str_starts_with( $lower, $scheme ) ) {
+            if ( strpos( $lower, $scheme ) === 0 ) {
                 return false;
             }
         }

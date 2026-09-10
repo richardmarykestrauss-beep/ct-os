@@ -133,7 +133,7 @@ class CTOS_REST {
     /**
      * GET permission: authenticated user with edit_pages capability.
      */
-    public function permission_read( WP_REST_Request $request ): bool|WP_Error {
+    public function permission_read( WP_REST_Request $request ) {
         if ( ! is_user_logged_in() ) {
             return new WP_Error(
                 'rest_not_logged_in',
@@ -154,7 +154,7 @@ class CTOS_REST {
     /**
      * PATCH + POST rollback permission: authenticated user who can edit the target page.
      */
-    public function permission_write( WP_REST_Request $request ): bool|WP_Error {
+    public function permission_write( WP_REST_Request $request ) {
         if ( ! is_user_logged_in() ) {
             return new WP_Error(
                 'rest_not_logged_in',
@@ -195,7 +195,7 @@ class CTOS_REST {
      *   "elementor_data": [...]
      * }
      */
-    public function handle_get( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function handle_get( WP_REST_Request $request ) {
         $page_id = absint( $request->get_param( 'page_id' ) );
         $result  = CTOS_Elementor::get_document( $page_id );
 
@@ -236,7 +236,7 @@ class CTOS_REST {
      * Returns on not found (HTTP 404):
      * { "code": "element_not_found", "message": "..." }
      */
-    public function handle_patch( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function handle_patch( WP_REST_Request $request ) {
         $page_id       = absint( $request->get_param( 'page_id' ) );
         $expected_hash = sanitize_text_field( (string) $request->get_param( 'expected_document_hash' ) );
         $patch         = $request->get_param( 'patch' );
@@ -283,7 +283,7 @@ class CTOS_REST {
      * Returns on success:
      * { "page_id": 316, "previous_hash": "...", "document_hash": "...", "snapshot_hash": "..." }
      */
-    public function handle_rollback( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function handle_rollback( WP_REST_Request $request ) {
         $page_id              = absint( $request->get_param( 'page_id' ) );
         $snapshot_hash        = sanitize_text_field( (string) $request->get_param( 'snapshot_hash' ) );
         $expected_current     = sanitize_text_field( (string) $request->get_param( 'expected_document_hash' ) );
