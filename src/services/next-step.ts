@@ -131,8 +131,22 @@ function stateNextStep(data: OSData, projectId: string, state: ProjectState): Ne
       return agent("A05", "Agent 05 (Builder) should build the site from the approved build pack.", state);
     }
 
-    case "BUILDING":
+    case "BUILDING": {
+      // CTOS-006: WP write conflicts or failures block BUILDING completion
+      const wpConflicts = data.websiteWriteResults.filter((r) => r.projectId === projectId && r.status === "CONFLICT_DETECTED");
+      if (wpConflicts.length > 0) return blocked(`${wpConflicts.length} website write conflict(s) require operator review before building can continue.`, "WP write conflicts.", state);
+      const wpFailed = data.websiteWriteResults.filter(
+        (r) =>
+          r.projectId === projectId &&
+          (r.status === "FAILED_WRITE" || r.status === "FAILED_READBACK" || r.status === "NEEDS_A_HAND"),
+      );
+      if (wpFailed.length > 0) return blocked(`${wpFailed.length} website write failure(s) require resolution before building can continue.`, "WP write failures.", state);
+      const pendingPlans = data.websiteChangePlans.filter(
+        (p) => p.projectId === projectId && (p.status === "READY" || p.status === "EXECUTING"),
+      );
+      if (pendingPlans.length > 0) return human(`${pendingPlans.length} website change plan(s) pending. Approve or wait for execution to complete.`, "WP change plans pending.", state);
       return agent("A05", "Agent 05 (Builder) is building the site. Monitor for completion.", state);
+    }
 
     case "QA": {
       const hasQA = data.qaItems.some((q) => q.projectId === projectId);
@@ -158,8 +172,14 @@ function stateNextStep(data: OSData, projectId: string, state: ProjectState): Ne
     case "READY_TO_LAUNCH":
       return human("Human operator must approve launch. Agent 07 will execute the deployment runbook.", "Launch requires human approval.", state);
 
-    case "MAINTENANCE":
+    case "MAINTENANCE": {
+      // CTOS-006: Active WP write operations surface as human actions in MAINTENANCE
+      const mWpConflicts = data.websiteWriteResults.filter((r) => r.projectId === projectId && r.status === "CONFLICT_DETECTED");
+      if (mWpConflicts.length > 0) return human(`${mWpConflicts.length} website write conflict(s) require review. A human edited the page during an automated write.`, "WP write conflict.", state);
+      const mPendingPlans = data.websiteChangePlans.filter((p) => p.projectId === projectId && p.status === "READY");
+      if (mPendingPlans.length > 0) return human(`${mPendingPlans.length} website change plan(s) awaiting approval.`, "WP change plan approval required.", state);
       return human("Site is live. Maintenance requests should create new jobs.", null, state);
+    }
 
     default:
       return blocked(`Unrecognised project state: ${state}`, "Unknown state.", state as ProjectState);

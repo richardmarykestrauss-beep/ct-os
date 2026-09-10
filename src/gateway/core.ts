@@ -238,6 +238,8 @@ export const EMPTY: OSData = {
   agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [], externalClients: [], externalAccessLog: [],
   buildPacks: [], revisionRounds: [], changeRequests: [], clientAssets: [], curationCandidates: [], screenshotEvidence: [], modeBJobs: [],
   visualReferences: [], signatureVisualElements: [], sectionLibrary: [], designTokenSets: [], visualDefects: [], designContentReconciliations: [],
+  // CTOS-006: WordPress Write Engine
+  wpSiteConnections: [], websiteChangePlans: [], websiteRevisionSnapshots: [], websiteWriteResults: [], wpWriteAuditLog: [], wpIdempotencyLog: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {

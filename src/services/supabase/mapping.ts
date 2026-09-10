@@ -45,7 +45,14 @@ export type TableName =
   | "section_library"
   | "design_token_sets"
   | "visual_defects"
-  | "design_content_reconciliations";
+  | "design_content_reconciliations"
+  // CTOS-006: WordPress Write Engine
+  | "wp_site_connections"
+  | "website_change_plans"
+  | "website_revision_snapshots"
+  | "website_write_results"
+  | "wp_write_audit_log"
+  | "wp_idempotency_log";
 
 export interface TableSpec {
   table: TableName;
@@ -98,6 +105,13 @@ export const TABLES: TableSpec[] = [
   { table: "design_token_sets", key: "designTokenSets", nullable: ["approvedBy", "approvedAt", "createdAt"] },
   { table: "visual_defects", key: "visualDefects", nullable: ["jobId", "viewport", "detectedByAgentId", "createdAt", "resolvedAt"] },
   { table: "design_content_reconciliations", key: "designContentReconciliations", nullable: ["designArtifactId", "contentArtifactId", "resolvedBy", "resolvedAt", "createdAt"] },
+  // CTOS-006: WordPress Write Engine
+  { table: "wp_site_connections", key: "wpSiteConnections", nullable: ["credentialsRef", "lastVerifiedAt", "ownershipNote", "hostProvider", "createdAt", "updatedAt"] },
+  { table: "website_change_plans", key: "websiteChangePlans", nullable: ["buildPackId", "elementorManifestArtifactId", "targetPageId", "targetPageTitle", "approvedById", "approvedAt", "executingJobId", "createdByJobId", "createdAt", "updatedAt"] },
+  { table: "website_revision_snapshots", key: "websiteRevisionSnapshots", nullable: ["elementorDocumentRef", "pageContentRef", "contentHash", "originatingJobId", "originatingChangePlanId"] },
+  { table: "website_write_results", key: "websiteWriteResults", nullable: ["beforeSnapshotId", "afterStateHash", "startedAt", "completedAt", "actorId", "actorName", "rollbackStatus"] },
+  { table: "wp_write_audit_log", key: "wpWriteAuditLog", nullable: ["changePlanId", "writeResultId", "requestedById", "requestedByName", "approvalId", "beforeSnapshotId", "result", "verificationPassed"] },
+  { table: "wp_idempotency_log", key: "wpIdempotencyLog", nullable: [] },
 ];
 
 export function toSnake(key: string): string {

@@ -23,7 +23,12 @@ export type AttentionKind =
   | "qa_critical"
   | "qa_major"
   | "visual_defect"
-  | "design_gate_blocked";
+  | "design_gate_blocked"
+  // CTOS-006: WordPress Write Engine
+  | "wp_change_plan_approval"
+  | "wp_write_conflict"
+  | "wp_write_failed"
+  | "wp_site_offline";
 
 export interface AttentionItem {
   id: string;
@@ -241,6 +246,83 @@ export function deriveAttentionQueue(data: OSData): AttentionItem[] {
       requiredActor: "operator",
       linkHint: `/projects/${d.projectId}/visual-defects/${d.id}`,
       sourceIds: [d.id],
+    });
+  }
+
+  // 12. CTOS-006: WP change plans awaiting approval (READY status = approved by engine, awaiting human for AMBER)
+  const pendingWpPlans = data.websiteChangePlans.filter((p) => p.status === "READY");
+  for (const plan of pendingWpPlans) {
+    items.push({
+      id: `wcp-approval-${plan.id}`,
+      kind: "wp_change_plan_approval",
+      urgency: "HIGH",
+      projectId: plan.projectId,
+      title: `Website change plan requires approval`,
+      detail: `Plan ${plan.id}: ${plan.actions.length} action(s) for page "${plan.targetPageTitle ?? plan.targetPageId}". Tier: ${plan.overallPermissionTier}.`,
+      requiredActor: "operator",
+      linkHint: `/projects/${plan.projectId}/write-engine/${plan.id}`,
+      sourceIds: [plan.id],
+    });
+  }
+
+  // 13. CTOS-006: WP write conflicts — precondition failures requiring human resolution
+  const conflictedResults = data.websiteWriteResults.filter((r) => r.status === "CONFLICT_DETECTED");
+  for (const result of conflictedResults) {
+    items.push({
+      id: `wwr-conflict-${result.id}`,
+      kind: "wp_write_conflict",
+      urgency: "HIGH",
+      projectId: result.projectId,
+      title: `Website write conflict: human edit detected`,
+      detail: `Write result ${result.id}: a human edit was detected on the target page during execution. Review and re-approve the change plan.`,
+      requiredActor: "operator",
+      linkHint: `/projects/${result.projectId}/write-engine/results/${result.id}`,
+      sourceIds: [result.id],
+    });
+  }
+
+  // 14. CTOS-006: WP write failures (not conflicts)
+  const failedResults = data.websiteWriteResults.filter(
+    (r) =>
+      r.status === "FAILED_WRITE" ||
+      r.status === "FAILED_READBACK" ||
+      r.status === "FAILED_CONNECTION" ||
+      r.status === "FAILED_PERMISSION" ||
+      r.status === "FAILED_VALIDATION" ||
+      r.status === "FAILED_ROLLBACK" ||
+      r.status === "NEEDS_A_HAND",
+  );
+  for (const result of failedResults) {
+    items.push({
+      id: `wwr-failed-${result.id}`,
+      kind: "wp_write_failed",
+      urgency: result.status === "NEEDS_A_HAND" ? "HIGH" : "MEDIUM",
+      projectId: result.projectId,
+      title: `Website write failed: ${result.status}`,
+      detail: `Write result ${result.id}. ${result.errors.length} error(s) recorded.`,
+      requiredActor: "operator",
+      linkHint: `/projects/${result.projectId}/write-engine/results/${result.id}`,
+      sourceIds: [result.id],
+    });
+  }
+
+  // 15. CTOS-006: WP site offline (OFFLINE or AUTH_FAILED connections tied to active projects)
+  const offlineConnections = data.wpSiteConnections.filter(
+    (c) => c.connectionStatus === "OFFLINE" || c.connectionStatus === "AUTH_FAILED",
+  );
+  for (const conn of offlineConnections) {
+    const isActive = data.projects.some((p) => p.id === conn.projectId);
+    if (!isActive) continue;
+    items.push({
+      id: `wsc-offline-${conn.id}`,
+      kind: "wp_site_offline",
+      urgency: conn.connectionStatus === "AUTH_FAILED" ? "HIGH" : "MEDIUM",
+      projectId: conn.projectId,
+      title: `WordPress site ${conn.connectionStatus === "AUTH_FAILED" ? "auth failed" : "offline"}: ${conn.siteUrl}`,
+      detail: `Site connection ${conn.id} is ${conn.connectionStatus}. Write actions are blocked until connection is restored.`,
+      requiredActor: "operator",
+      linkHint: `/projects/${conn.projectId}/site-connection/${conn.id}`,
+      sourceIds: [conn.id],
     });
   }
 

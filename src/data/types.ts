@@ -274,6 +274,9 @@ export type ArtifactType =
   | "page_composition"
   | "visual_review"
   | "elementor_build_manifest"
+  // CTOS-006 additions
+  | "website_change_plan"
+  | "wp_write_result"
   | "other";
 
 export type ArtifactStatus = "DRAFT" | "FINAL" | "SUPERSEDED" | "REJECTED";
@@ -1334,6 +1337,13 @@ export interface OSData {
   designTokenSets: DesignTokenSet[];
   visualDefects: VisualDefect[];
   designContentReconciliations: DesignContentReconciliation[];
+  // CTOS-006 additions (default to [] in all existing seeds/EMPTY objects)
+  wpSiteConnections: WordPressSiteConnection[];
+  websiteChangePlans: WebsiteChangePlan[];
+  websiteRevisionSnapshots: WebsiteRevisionSnapshot[];
+  websiteWriteResults: WebsiteWriteResult[];
+  wpWriteAuditLog: WpWriteAuditEntry[];
+  wpIdempotencyLog: WpIdempotencyRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1634,5 +1644,349 @@ export interface EvidenceClaim {
   confidence: number;
   madeByAgentId: string | null;
   jobId: string | null;
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// CTOS-006: Controlled WordPress / Elementor Write Engine
+// ---------------------------------------------------------------------------
+
+// Part 1 — Site connection model
+export type WpEnvironment = "LOCAL" | "DEV" | "STAGING" | "PRODUCTION";
+export type WpCmsBuilder = "ELEMENTOR" | "ELEMENTOR_PRO" | "GUTENBERG" | "UNKNOWN";
+export type WpConnectionStatus = "UNCHECKED" | "ONLINE" | "OFFLINE" | "AUTH_FAILED" | "DECOMMISSIONED";
+export type WpConnectionCapability =
+  | "read_content"
+  | "write_draft"
+  | "write_published"
+  | "read_elementor"
+  | "write_elementor"
+  | "create_revision"
+  | "restore_revision"
+  | "read_media"
+  | "write_media";
+
+/** Non-secret WordPress site binding. Credential values NEVER stored here — only a vault-key reference. */
+export interface WordPressSiteConnection {
+  id: string;
+  projectId: string;
+  siteUrl: string;
+  environment: WpEnvironment;
+  cms: "WORDPRESS";
+  builder: WpCmsBuilder;
+  /** Auth mechanism name only — never the credential value. */
+  authMethod: "application_password" | "jwt" | "ct_bridge" | "none";
+  /** Vault/env-var key pointing to where the credential lives. Never the credential itself. */
+  credentialsRef: string | null;
+  connectionStatus: WpConnectionStatus;
+  lastVerifiedAt: ISODate | null;
+  capabilities: WpConnectionCapability[];
+  writeable: boolean;
+  ownershipNote: string | null;
+  /** e.g. "Hostinger". Stored so migration can be planned without hardcoding it. */
+  hostProvider: string | null;
+  /** When true, the host can be swapped without changing project identity or write provenance. */
+  hostReplaceable: boolean;
+  createdAt: ISODate | null;
+  updatedAt: ISODate | null;
+}
+
+// Part 4 — Write action taxonomy
+export type WpWriteActionType =
+  // Content
+  | "UPDATE_HEADING"
+  | "UPDATE_TEXT"
+  | "UPDATE_BUTTON_LABEL"
+  | "UPDATE_BUTTON_URL"
+  // Media
+  | "REPLACE_IMAGE"
+  // Elementor
+  | "UPDATE_WIDGET_CONTENT"
+  | "UPDATE_WIDGET_STYLE_SAFE"
+  | "UPDATE_CONTAINER_SETTINGS_SAFE"
+  | "ADD_APPROVED_SECTION"
+  | "REMOVE_DRAFT_SECTION"
+  | "REORDER_DRAFT_SECTIONS"
+  // Page
+  | "CREATE_DRAFT_PAGE"
+  | "UPDATE_PAGE_TITLE"
+  | "UPDATE_PAGE_SLUG_DRAFT"
+  | "UPDATE_META_DESCRIPTION";
+
+// Part 7 — Deterministic target resolution
+export interface WpTargetRef {
+  pageId: string | null;
+  templateId: string | null;
+  elementorElementId: string | null;
+  widgetId: string | null;
+  containerId: string | null;
+  sectionSemanticKey: string | null;
+  contentSlotKey: string | null;
+}
+
+// Part 8 — Preconditions for compare-and-swap safety
+export type WpPreconditionKind = "document_revision" | "page_modified_ts" | "elementor_hash" | "content_value" | "widget_identity";
+export interface WpPrecondition {
+  kind: WpPreconditionKind;
+  expectedValue: string;
+}
+
+// Write action record
+export interface WpWriteAction {
+  id: string;
+  type: WpWriteActionType;
+  permissionLevel: PermissionLevel;
+  target: WpTargetRef;
+  preconditions: WpPrecondition[];
+  /** Type-safe payload varies per action type; kept as Record for forward-compat. */
+  payload: Record<string, unknown>;
+  /** Deterministic key preventing duplicate execution of the same action. */
+  idempotencyKey: string;
+}
+
+// Part 6 — Change plan
+export type WpChangePlanStatus =
+  | "DRAFT"
+  | "READY"
+  | "EXECUTING"
+  | "COMPLETED"
+  | "FAILED"
+  | "ROLLED_BACK"
+  | "SUPERSEDED";
+
+export interface WebsiteChangePlan {
+  id: string;
+  projectId: string;
+  siteConnectionId: string;
+  environment: WpEnvironment;
+  sourceRequest: string;
+  buildPackId: string | null;
+  elementorManifestArtifactId: string | null;
+  targetPageId: string | null;
+  targetPageTitle: string | null;
+  actions: WpWriteAction[];
+  /** Highest permission tier across all actions — gates human approval requirement. */
+  overallPermissionTier: PermissionLevel;
+  backupRequired: boolean;
+  verificationRequired: boolean;
+  screenshotRequired: boolean;
+  rollbackStrategy: string;
+  humanApprovalsRequired: string[];
+  risks: string[];
+  status: WpChangePlanStatus;
+  approvedById: string | null;
+  approvedAt: ISODate | null;
+  executingJobId: string | null;
+  createdByJobId: string | null;
+  provenance: string;
+  createdAt: ISODate | null;
+  updatedAt: ISODate | null;
+}
+
+// Part 9 — Revision snapshot (rollback anchor)
+export interface WebsiteRevisionSnapshot {
+  id: string;
+  projectId: string;
+  siteConnectionId: string;
+  pageId: string;
+  environment: WpEnvironment;
+  capturedAt: ISODate | null;
+  /** WordPress revision ID at capture time. */
+  sourceRevision: string | null;
+  /** Storage pointer to the Elementor document blob — never inline in OSData. */
+  elementorDocumentRef: string | null;
+  pageContentRef: string | null;
+  contentHash: string | null;
+  originatingJobId: string | null;
+  originatingChangePlanId: string | null;
+}
+
+// Part 11 — Write result
+export type WpWriteResultStatus =
+  | "SUCCEEDED_VERIFIED"
+  | "FAILED_CONNECTION"
+  | "FAILED_PERMISSION"
+  | "FAILED_VALIDATION"
+  | "CONFLICT_DETECTED"
+  | "FAILED_WRITE"
+  | "FAILED_READBACK"
+  | "FAILED_ROLLBACK"
+  | "NEEDS_A_HAND";
+
+export interface WpActionResult {
+  actionId: string;
+  type: WpWriteActionType;
+  status: "SUCCEEDED" | "FAILED" | "SKIPPED" | "CONFLICT";
+  beforeValue: unknown;
+  afterValue: unknown;
+  error: string | null;
+  verificationPassed: boolean | null;
+}
+
+export interface WebsiteWriteResult {
+  id: string;
+  changePlanId: string;
+  projectId: string;
+  siteConnectionId: string;
+  status: WpWriteResultStatus;
+  actionResults: WpActionResult[];
+  beforeSnapshotId: string | null;
+  afterStateHash: string | null;
+  verificationResults: { field: string; expected: string; actual: string; match: boolean }[];
+  startedAt: ISODate | null;
+  completedAt: ISODate | null;
+  transport: "REST_API" | "CT_BRIDGE" | "FAKE";
+  actorId: string | null;
+  actorName: string | null;
+  errors: string[];
+  rollbackStatus: "NOT_NEEDED" | "COMPLETED" | "FAILED" | "NOT_ATTEMPTED" | null;
+  provenance: string;
+}
+
+// Part 33 — Audit log (NEVER contains raw auth headers, passwords, tokens, nonces, cookies)
+export interface WpWriteAuditEntry {
+  id: string;
+  projectId: string;
+  siteConnectionId: string;
+  environment: WpEnvironment;
+  changePlanId: string | null;
+  writeResultId: string | null;
+  requestedById: string | null;
+  requestedByName: string | null;
+  permissionLevel: PermissionLevel;
+  approvalId: string | null;
+  actionTypes: WpWriteActionType[];
+  transport: "REST_API" | "CT_BRIDGE" | "FAKE";
+  timestamp: ISODate;
+  beforeSnapshotId: string | null;
+  result: WpWriteResultStatus | null;
+  verificationPassed: boolean | null;
+  rollbackPerformed: boolean;
+}
+
+// Part 12 — Idempotency
+export interface WpIdempotencyRecord {
+  id: string;
+  idempotencyKey: string;
+  changePlanId: string;
+  projectId: string;
+  appliedAt: ISODate;
+  resultId: string;
+}
+
+// Part 14 — Minimal Elementor document model (only what is needed for safe patching)
+export type ElementorNodeType =
+  | "container"
+  | "heading"
+  | "text"
+  | "image"
+  | "button"
+  | "icon"
+  | "spacer"
+  | "form_ref"
+  | "woo_widget_ref"
+  | "unknown";
+
+export interface ElementorNode {
+  id: string;
+  type: ElementorNodeType;
+  /** Known/safe settings only. Unknown fields are preserved in _preserved. */
+  settings: Record<string, unknown>;
+  children: ElementorNode[];
+  /** All unknown/unsupported Elementor fields preserved here to prevent accidental data loss. */
+  _preserved: Record<string, unknown>;
+}
+
+export interface ElementorDocument {
+  pageId: string;
+  version: string;
+  /** SHA-256 of the canonical document JSON — used for precondition checks. */
+  documentHash: string;
+  nodes: ElementorNode[];
+}
+
+// Part 15 — Elementor patch operations
+export type ElementorPatchOpType =
+  | "SET_WIDGET_TEXT"
+  | "SET_WIDGET_LINK"
+  | "SET_IMAGE"
+  | "SET_SETTING"
+  | "ADD_CHILD"
+  | "REMOVE_CHILD"
+  | "MOVE_CHILD";
+
+/** Safe Elementor style settings permitted under GREEN actions. */
+export type SafeStyleSettingKey =
+  | "text_align"
+  | "color"
+  | "background_color"
+  | "margin"
+  | "padding"
+  | "border_radius"
+  | "typography_font_size"
+  | "typography_font_weight"
+  | "width"
+  | "height"
+  | "responsive_visibility"
+  | "flex_justify_content"
+  | "flex_align_items";
+
+export interface ElementorPatchOp {
+  id: string;
+  op: ElementorPatchOpType;
+  targetElementId: string;
+  expectedElementType: ElementorNodeType;
+  expectedCurrentValue?: unknown;
+  newValue?: unknown;
+  /** Only for SET_SETTING — must be in SafeStyleSettingKey for GREEN; custom CSS is AMBER minimum. */
+  settingKey?: string;
+  permissionLevel: PermissionLevel;
+  sourcePlanId: string;
+}
+
+// Part 23 — Diff model
+export interface WpContentDiff {
+  field: string;
+  old: string;
+  new: string;
+}
+
+export interface WpElementorPropertyDiff {
+  nodeId: string;
+  nodeType: ElementorNodeType;
+  property: string;
+  before: unknown;
+  after: unknown;
+}
+
+export type WpStructuralChangeKind = "added_section" | "removed_section" | "moved_section";
+
+export interface WpStructuralChange {
+  kind: WpStructuralChangeKind;
+  sectionId: string;
+  sectionName: string;
+  position?: number;
+}
+
+export interface WpDiffModel {
+  contentDiffs: WpContentDiff[];
+  elementorDiffs: WpElementorPropertyDiff[];
+  structuralChanges: WpStructuralChange[];
+}
+
+// Part 30 — U-Proof site connection onboarding checklist
+export interface WpConnectionChecklistItem {
+  key: string;
+  description: string;
+  required: boolean;
+  complete: boolean;
+  completedAt: ISODate | null;
+}
+
+export interface WpSiteConnectionChecklist {
+  siteConnectionId: string;
+  projectId: string;
+  items: WpConnectionChecklistItem[];
+  launchHoldIds: string[];
   createdAt: ISODate | null;
 }

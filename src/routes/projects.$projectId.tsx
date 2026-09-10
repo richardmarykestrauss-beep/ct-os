@@ -36,6 +36,7 @@ import { JOB_STATUS_LABELS } from "@/services/agent-jobs";
 import { PROVIDER_LABELS } from "@/ai/registry";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Eye, FlaskConical, Play, ShieldCheck, ThumbsUp } from "lucide-react";
 import { VisualReviewStatusPanel } from "@/components/os/VisualReviewStatus";
+import { WriteEngineStatusPanel } from "@/components/os/WriteEngineStatus";
 
 type Tab = "overview" | "pages" | "tickets" | "agents" | "artifacts" | "runs" | "qa" | "approvals" | "activity";
 
@@ -347,6 +348,7 @@ function ProjectDetail() {
                 </Card>
               ) : null}
               <VisualReviewStatusPanel projectId={project.id} data={data} />
+              <WriteEngineStatusPanel projectId={project.id} data={data} />
               <Card>
                 <CardHeader>
                   <CardTitle>Client</CardTitle>

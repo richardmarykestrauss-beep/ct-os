@@ -1042,4 +1042,11 @@ export const seedData: OSData = {
   designTokenSets: [],
   visualDefects: [],
   designContentReconciliations: [],
+  // CTOS-006 additions
+  wpSiteConnections: [],
+  websiteChangePlans: [],
+  websiteRevisionSnapshots: [],
+  websiteWriteResults: [],
+  wpWriteAuditLog: [],
+  wpIdempotencyLog: [],
 };
