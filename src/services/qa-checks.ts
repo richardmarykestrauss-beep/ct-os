@@ -123,16 +123,6 @@ export function checkLinks(links: LinkInput[], knownPages: string[]): LinkCheckR
 // C. Console error evidence
 // ---------------------------------------------------------------------------
 
-export type ConsoleErrorKind = "error" | "warning" | "info";
-
-/**
- * Typed record of a single browser console entry.
- * Agent 06 must NOT claim "console checked" without an array of these records as evidence —
- * an empty array means console was clean, not that it was unchecked.
- */
-export interface ConsoleErrorRecord {
-  kind: ConsoleErrorKind;
-  message: string;
-  source?: string;
-  lineNumber?: number;
-}
+// ConsoleErrorKind and ConsoleErrorRecord are defined in @/data/types (CTOS-005B) and
+// re-exported here so all existing imports from this module continue to work unchanged.
+export type { ConsoleErrorKind, ConsoleErrorRecord } from "@/data/types";

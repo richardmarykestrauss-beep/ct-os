@@ -251,6 +251,101 @@ export const SCHEMAS = {
     secretScanIssues: z.array(z.string()).max(20),
   }),
 
+  /**
+   * design_direction@1 — Agent 03 DIRECTION pass output (CTOS-005B Part 1).
+   * Brand/direction analysis: tone, colour strategy, typography strategy, signature element,
+   * reference modes, and explicit anti-generic decisions.
+   */
+  "design_direction@1": z.object({
+    summary: nonEmpty,
+    brandDirection: nonEmpty.describe("Plain-language brand direction a client could read"),
+    visualTone: nonEmpty,
+    colorStrategy: nonEmpty,
+    typographyStrategy: nonEmpty,
+    signatureElement: nonEmpty.describe("Description of the proposed signature visual element"),
+    references: z.array(z.object({ url: nonEmpty, title: nonEmpty, mode: z.enum(["REPLICATE", "MODERNIZE", "REIMAGINE"]) })).max(20),
+    antiGenericDecisions: z.array(z.object({ patternChallenged: nonEmpty, chosenApproach: nonEmpty })).max(20),
+    evidenceLog: z.array(evidenceRef).max(50),
+  }),
+
+  /**
+   * page_composition@1 — Agent 03 COMPOSITION pass output (CTOS-005B Part 1).
+   * Page-by-page layout composition and section requirements.
+   */
+  "page_composition@1": z.object({
+    summary: nonEmpty,
+    designSystemArtifactId: nonEmpty.nullable(),
+    pages: z.array(z.object({
+      path: nonEmpty,
+      compositionRationale: nonEmpty,
+      sections: z.array(z.object({
+        name: nonEmpty,
+        layoutDescription: nonEmpty,
+        contentBrief: nonEmpty,
+        designNotes: z.string().optional(),
+      })).min(1).max(50),
+    })).min(1).max(100),
+  }),
+
+  /**
+   * visual_review@1 — Agent 03 VISUAL_REVIEW pass OR Agent 06 QA visual output (CTOS-005B Part 1/21).
+   * 18-dimension rubric result; overall verdict; never averaged over critical dimensions.
+   */
+  "visual_review@1": z.object({
+    summary: nonEmpty,
+    operatingPass: z.enum(["DIRECTION", "COMPOSITION", "VISUAL_REVIEW"]),
+    overallVerdict: z.enum(["A", "B", "C"]),
+    scores: z.array(z.object({
+      dimension: z.enum([
+        "BRAND_ALIGNMENT", "VISUAL_HIERARCHY", "LAYOUT_COMPOSITION", "SPACING_RHYTHM",
+        "TYPOGRAPHY", "COLOR_USE", "IMAGERY", "NAVIGATION", "CTA_CLARITY", "CONVERSION_CLARITY",
+        "TRUST", "CONTENT_CLARITY", "RESPONSIVENESS", "MOBILE_USABILITY", "PRODUCT_PRESENTATION",
+        "ORIGINALITY", "POLISH", "TECHNICAL_VISUAL_DEFECTS",
+      ]),
+      score: z.number().int().min(1).max(5),
+      verdict: z.enum(["A", "B", "C"]),
+      rationale: nonEmpty,
+      evidence: z.array(nonEmpty).max(10),
+    })).min(1).max(18),
+    criticalDimensions: z.array(nonEmpty).max(18),
+    blockingIssues: shortList,
+    screenshotEvidenceIds: z.array(z.string()).max(50),
+  }),
+
+  /**
+   * elementor_build_manifest@1 — Agent 05 Builder output (CTOS-005B Parts 9/10).
+   * Records what was built, what strategy was used per section, and human-edit protection hashes.
+   */
+  "elementor_build_manifest@1": z.object({
+    summary: nonEmpty,
+    projectId: nonEmpty,
+    version: z.number().int().min(1),
+    designTokenSetId: nonEmpty.nullable(),
+    pages: z.array(z.object({
+      path: nonEmpty,
+      title: nonEmpty,
+      sections: z.array(z.object({
+        id: nonEmpty,
+        name: nonEmpty,
+        strategy: z.enum(["LIBRARY_ASSEMBLY", "NATIVE_NOVEL_BUILD"]),
+        libraryEntryId: z.string().nullable(),
+        noveltyJustification: z.string().nullable(),
+      })).max(50),
+      humanEditProtection: z.object({
+        contentHash: nonEmpty.nullable(),
+        lastBuiltByJobId: nonEmpty.nullable(),
+        artifactVersion: z.number().int().min(1).nullable(),
+        humanEditDetected: z.boolean(),
+      }),
+    })).min(1).max(200),
+    buildStrategyDecisions: z.array(z.object({
+      sectionId: nonEmpty,
+      strategy: z.enum(["LIBRARY_ASSEMBLY", "NATIVE_NOVEL_BUILD"]),
+      rationale: nonEmpty,
+    })).max(200),
+    warnings: shortList,
+  }),
+
   "other@1": z.object({ summary: nonEmpty, content: z.unknown().optional() }),
 } as const;
 
@@ -394,6 +489,61 @@ export const EXAMPLES: Record<SchemaName, unknown> = {
     evidenceExpectations: ["At least one source per major finding"],
     secretScanStatus: "clean",
     secretScanIssues: [],
+  },
+  "design_direction@1": {
+    summary: "Stub design direction — industrial, trustworthy, purpose-led.",
+    brandDirection: "Strong, technical credibility — built for trade buyers who need proof, not persuasion.",
+    visualTone: "Clean and purposeful. Industrial confidence without being cold.",
+    colorStrategy: "Deep navy primary for authority; amber accent for CTA energy; white space to breathe.",
+    typographyStrategy: "Heavy weight for headlines (Inter 700); clear legible body; one type family.",
+    signatureElement: "Diagonal cut section divider — references waterproofing membrane layering; no generic curves.",
+    references: [{ url: "https://example.invalid/ref1", title: "Industrial B2B reference", mode: "MODERNIZE" }],
+    antiGenericDecisions: [{ patternChallenged: "Hero + 3 cards + testimonials layout", chosenApproach: "Application-first navigation: lead with outcome (watertight) not category (products)" }],
+    evidenceLog: [{ ref: "art_up_brief", note: "Project brief" }],
+  },
+  "page_composition@1": {
+    summary: "Stub composition — homepage and product archive.",
+    designSystemArtifactId: null,
+    pages: [{
+      path: "/",
+      compositionRationale: "Lead with proof of outcome; secondary CTA to application pages.",
+      sections: [
+        { name: "Hero", layoutDescription: "Full-width; headline left-aligned; application image right", contentBrief: "Primary H1 with outcome statement; CTA to solutions" },
+        { name: "Solutions row", layoutDescription: "3-column application cards with icon+title+CTA", contentBrief: "Top 3 waterproofing applications" },
+      ],
+    }],
+  },
+  "visual_review@1": {
+    summary: "Stub visual review — overall B; two polish items.",
+    operatingPass: "VISUAL_REVIEW",
+    overallVerdict: "B",
+    scores: [
+      { dimension: "BRAND_ALIGNMENT", score: 4, verdict: "A", rationale: "Colour and type consistent with brief.", evidence: ["screenshot_desktop_home"] },
+      { dimension: "CTA_CLARITY", score: 3, verdict: "B", rationale: "CTA visible but could be more prominent.", evidence: ["screenshot_mobile_home"] },
+    ],
+    criticalDimensions: [],
+    blockingIssues: [],
+    screenshotEvidenceIds: ["sse_up_home_1440", "sse_up_home_375"],
+  },
+  "elementor_build_manifest@1": {
+    summary: "Stub build manifest — homepage built.",
+    projectId: "proj_stub",
+    version: 1,
+    designTokenSetId: null,
+    pages: [{
+      path: "/",
+      title: "Home",
+      sections: [
+        { id: "sec_hero", name: "Hero", strategy: "LIBRARY_ASSEMBLY", libraryEntryId: "slib_hero_standard", noveltyJustification: null },
+        { id: "sec_solutions", name: "Solutions Row", strategy: "NATIVE_NOVEL_BUILD", libraryEntryId: null, noveltyJustification: "3-column application grid not in current library" },
+      ],
+      humanEditProtection: { contentHash: null, lastBuiltByJobId: null, artifactVersion: null, humanEditDetected: false },
+    }],
+    buildStrategyDecisions: [
+      { sectionId: "sec_hero", strategy: "LIBRARY_ASSEMBLY", rationale: "Standard hero pattern from approved library" },
+      { sectionId: "sec_solutions", strategy: "NATIVE_NOVEL_BUILD", rationale: "No matching library entry; novelty justified" },
+    ],
+    warnings: [],
   },
   "other@1": { summary: "Stub output." },
 };

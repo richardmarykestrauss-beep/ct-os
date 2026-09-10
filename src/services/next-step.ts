@@ -108,11 +108,18 @@ function stateNextStep(data: OSData, projectId: string, state: ProjectState): Ne
     case "DESIGN_AND_CONTENT": {
       const hasBlueprint = data.artifacts.some((a) => a.projectId === projectId && a.type === "site_blueprint" && a.status === "FINAL");
       if (!hasBlueprint) return blocked("No approved site blueprint. Agent 02 must complete the blueprint first.", "Missing site_blueprint.", state);
+      const hasDirection = data.artifacts.some((a) => a.projectId === projectId && a.type === "design_direction" && a.status === "FINAL");
+      if (!hasDirection) return agent("A03", "Agent 03 (Creative Director) should run the DIRECTION pass and produce a design_direction artifact.", state);
+      const hasComposition = data.artifacts.some((a) => a.projectId === projectId && a.type === "page_composition" && a.status === "FINAL");
+      if (!hasComposition) return agent("A03", "Agent 03 (Creative Director) should run the COMPOSITION pass and produce a page_composition artifact.", state);
       const hasDesign = data.artifacts.some((a) => a.projectId === projectId && a.type === "design_system" && a.status === "FINAL");
       const hasContent = data.artifacts.some((a) => a.projectId === projectId && a.type === "content_pack" && a.status === "FINAL");
       if (!hasDesign) return agent("A03", "Agent 03 (Creative Director) should produce the design system.", state);
-      if (!hasContent) return agent("A04", "Agent 04 (Content Architect) should produce the content pack.", state);
-      return human("Design system and content pack are both complete. Review and approve to advance to READY_TO_BUILD.", null, state);
+      if (!hasContent) return agent("A04", "Agent 04 (Content) should produce the content pack.", state);
+      // Check open design↔content reconciliations (CTOS-005B Part 17)
+      const openRecs = data.designContentReconciliations.filter((r) => r.projectId === projectId && r.status === "OPEN");
+      if (openRecs.length > 0) return human(`Resolve ${openRecs.length} open design↔content reconciliation(s) before advancing.`, "Open reconciliations.", state);
+      return human("Direction, composition, design system and content pack complete. Review reconciliations and approve to advance to READY_TO_BUILD.", null, state);
     }
 
     case "CONTENT":
@@ -134,6 +141,9 @@ function stateNextStep(data: OSData, projectId: string, state: ProjectState): Ne
       if (criticals.length > 0) return blocked(`${criticals.length} CRITICAL QA defect(s) must be resolved before client review.`, "Open CRITICAL defects.", state);
       const majors = data.qaItems.filter((q) => q.projectId === projectId && q.severity === "P1" && q.status !== "VERIFIED" && q.status !== "WONT_FIX");
       if (majors.length > 0) return blocked(`${majors.length} MAJOR QA defect(s) must be resolved before client review.`, "Open MAJOR defects.", state);
+      // CTOS-005B Part 28: Visual defects (P0/P1) also block QA exit
+      const criticalVisual = data.visualDefects.filter((d) => d.projectId === projectId && (d.severity === "P0" || d.severity === "P1") && d.status !== "VERIFIED" && d.status !== "WONT_FIX");
+      if (criticalVisual.length > 0) return blocked(`${criticalVisual.length} blocking visual defect(s) must be resolved before client review.`, "Open visual defects.", state);
       return human("QA complete. Review results and advance to CLIENT_REVIEW.", null, state);
     }
 

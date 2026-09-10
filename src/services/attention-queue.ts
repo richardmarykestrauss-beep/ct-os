@@ -21,7 +21,9 @@ export type AttentionKind =
   | "client_feedback"
   | "revision_escalation"
   | "qa_critical"
-  | "qa_major";
+  | "qa_major"
+  | "visual_defect"
+  | "design_gate_blocked";
 
 export interface AttentionItem {
   id: string;
@@ -206,6 +208,39 @@ export function deriveAttentionQueue(data: OSData): AttentionItem[] {
       requiredActor: "operator",
       linkHint: `/projects/${qa.projectId}/qa/${qa.id}`,
       sourceIds: [qa.id],
+    });
+  }
+
+  // 11. CTOS-005B: Visual defects (Part 27) — P0/P1 at HIGH, P2/P3 at LOW
+  const criticalVisualDefects = data.visualDefects.filter((d) => (d.severity === "P0" || d.severity === "P1") && d.status !== "VERIFIED" && d.status !== "WONT_FIX");
+  for (const d of criticalVisualDefects) {
+    const label = d.severity === "P0" ? "CRITICAL" : "MAJOR";
+    items.push({
+      id: `vdef-${d.id}`,
+      kind: "visual_defect",
+      urgency: d.severity === "P0" ? "HIGH" : "MEDIUM",
+      projectId: d.projectId,
+      title: `${label} visual defect: ${d.category} — ${d.description.slice(0, 80)}`,
+      detail: `Category: ${d.category}. ${d.evidence.length > 0 ? `Evidence: ${d.evidence[0]}` : "No evidence attached."}`,
+      requiredActor: "operator",
+      linkHint: `/projects/${d.projectId}/visual-defects/${d.id}`,
+      sourceIds: [d.id],
+    });
+  }
+
+  const minorVisualDefects = data.visualDefects.filter((d) => (d.severity === "P2" || d.severity === "P3") && d.status !== "VERIFIED" && d.status !== "WONT_FIX");
+  for (const d of minorVisualDefects) {
+    const label = d.severity === "P2" ? "MINOR" : "COSMETIC";
+    items.push({
+      id: `vdefm-${d.id}`,
+      kind: "visual_defect",
+      urgency: "LOW",
+      projectId: d.projectId,
+      title: `${label} visual defect: ${d.category}`,
+      detail: d.description.slice(0, 120),
+      requiredActor: "operator",
+      linkHint: `/projects/${d.projectId}/visual-defects/${d.id}`,
+      sourceIds: [d.id],
     });
   }
 

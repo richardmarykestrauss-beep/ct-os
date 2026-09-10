@@ -237,6 +237,7 @@ export const EMPTY: OSData = {
   clients: [], projects: [], phases: [], agents: [], pages: [], tickets: [], artifacts: [], qaItems: [], qaRuns: [], launchHolds: [], approvals: [], gates: [], activity: [],
   agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [], externalClients: [], externalAccessLog: [],
   buildPacks: [], revisionRounds: [], changeRequests: [], clientAssets: [], curationCandidates: [], screenshotEvidence: [], modeBJobs: [],
+  visualReferences: [], signatureVisualElements: [], sectionLibrary: [], designTokenSets: [], visualDefects: [], designContentReconciliations: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {

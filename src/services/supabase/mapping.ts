@@ -39,7 +39,13 @@ export type TableName =
   | "client_assets"
   | "curation_candidates"
   | "screenshot_evidence"
-  | "mode_b_jobs";
+  | "mode_b_jobs"
+  | "visual_references"
+  | "signature_visual_elements"
+  | "section_library"
+  | "design_token_sets"
+  | "visual_defects"
+  | "design_content_reconciliations";
 
 export interface TableSpec {
   table: TableName;
@@ -85,6 +91,13 @@ export const TABLES: TableSpec[] = [
   { table: "curation_candidates", key: "curationCandidates", nullable: ["projectId", "reviewedById", "reviewedByName", "reviewedAt", "createdAt"] },
   { table: "screenshot_evidence", key: "screenshotEvidence", nullable: [] },
   { table: "mode_b_jobs", key: "modeBJobs", nullable: ["jobPackHash", "jobPackId", "exportedAt", "resultImportedAt", "resultRejectedReason", "operatorId", "operatorName", "createdAt"] },
+  // CTOS-005B additions
+  { table: "visual_references", key: "visualReferences", nullable: ["approvedAt", "createdAt"] },
+  { table: "signature_visual_elements", key: "signatureVisualElements", nullable: ["proposedByAgentId", "approvedBy", "approvedAt", "createdAt"] },
+  { table: "section_library", key: "sectionLibrary", nullable: ["noveltyJustification", "approvedBy", "approvedAt", "createdAt"] },
+  { table: "design_token_sets", key: "designTokenSets", nullable: ["approvedBy", "approvedAt", "createdAt"] },
+  { table: "visual_defects", key: "visualDefects", nullable: ["jobId", "viewport", "detectedByAgentId", "createdAt", "resolvedAt"] },
+  { table: "design_content_reconciliations", key: "designContentReconciliations", nullable: ["designArtifactId", "contentArtifactId", "resolvedBy", "resolvedAt", "createdAt"] },
 ];
 
 export function toSnake(key: string): string {

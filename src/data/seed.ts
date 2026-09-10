@@ -27,6 +27,7 @@ import type {
   Skill,
   Ticket,
 } from "./types";
+import { SECTION_LIBRARY_DEFAULTS } from "@/services/section-library";
 
 // ---------------------------------------------------------------------------
 // IDs
@@ -371,24 +372,23 @@ const skills: Skill[] = [
   },
   {
     id: SKILL_IDS.VISUAL_DESIGN,
-    name: "CT Visual Design Skill v0.1",
-    version: 1,
+    name: "CT Visual Design Skill v0.2",
+    version: 2,
     kind: "design_review",
     status: "CANDIDATE",
     scope: "design-review",
     ownerAgentIds: [AGENT_IDS.A03],
     reviewerAgentIds: [AGENT_IDS.A06],
     content:
-      "Structured client-readiness review, scored per category, never self-certified by the builder: " +
-      "Brand consistency (logo/colour/type used correctly and consistently); Hierarchy (the eye is led to the primary action on every page); " +
-      "Spacing (consistent rhythm, no cramped or wildly uneven gaps); Typography (a small, consistent type scale, no orphaned styles); " +
-      "Navigation (desktop and mobile nav are complete, uncluttered, and every link resolves); Responsiveness (desktop/tablet/mobile screenshots reviewed at real breakpoints — no clipped text, no overlap); " +
-      "Conversion clarity (the primary CTA is unambiguous per page); Content clarity (no placeholder/lorem text, no inconsistent shared components); " +
-      "Product presentation (product cards are legible, images are relevant and correctly cropped); Trust/professionalism (the page would not embarrass the agency in front of the client); " +
-      "Technical visual defects (no clipped text, no visible internal scaffolding, no broken shared components). " +
-      "Each category is scored individually, then a single client-readiness verdict is given: A = SAFE TO SEND, B = SMALL POLISH PASS (list exactly what), C = NOT READY (list why). " +
-      "Design quality is judged separately from technical correctness — a page can be functionally correct (HTTP 200, no console errors) and still fail this review.",
-    evidence: ["U-Proof visual QA passes — desktop/tablet/mobile screenshot review", "U-Proof product card legibility fixes"],
+      "18-dimension structured visual review, never self-certified by the builder (A03 runs DIRECTION/COMPOSITION/VISUAL_REVIEW passes; A06 runs independent QA). " +
+      "Dimensions: BRAND_ALIGNMENT, VISUAL_HIERARCHY, LAYOUT_COMPOSITION, SPACING_RHYTHM, TYPOGRAPHY, COLOR_USE, IMAGERY, NAVIGATION, CTA_CLARITY, CONVERSION_CLARITY, TRUST, CONTENT_CLARITY, RESPONSIVENESS, MOBILE_USABILITY, PRODUCT_PRESENTATION, ORIGINALITY, POLISH, TECHNICAL_VISUAL_DEFECTS. " +
+      "Each dimension scored 1–5 and mapped to a verdict (A=4–5, B=3, C=1–2). Overall verdict uses priority order — any score ≤2 forces C, any score=3 forces B; no dimension averaging that hides a CRITICAL failure. " +
+      "Anti-generic rules enforced: no hero+3-cards commodity layouts; no generic icon sets as design features; no stock-photo hero images; no gradient-only buttons; no 'Why us?' 3-icon grids; no footer-as-primary-navigation; no unverified counter badges (awards/years/etc). " +
+      "Screenshot evidence required at 1440px (desktop) and 375px (mobile) minimum before any review pass. " +
+      "All claims typed as OBSERVED/INFERRED/PROPOSED/VERIFIED — no evidence-free assertions. " +
+      "Evidence grounding: scores cite specific screenshot coordinates, section names, or element descriptions. " +
+      "Post-build gate sequence: BUILD → SCREENSHOT_CAPTURE → A03_VISUAL_REVIEW → A06_QA → HUMAN_APPROVAL → APPROVED.",
+    evidence: ["U-Proof visual QA passes — desktop/tablet/mobile screenshot review", "U-Proof product card legibility fixes", "CTOS-005B 18-dimension rubric"],
     supersedesId: null,
     approvedBy: null,
     approvedById: null,
@@ -398,15 +398,20 @@ const skills: Skill[] = [
   },
   {
     id: SKILL_IDS.ELEMENTOR_BUILDER,
-    name: "CT Elementor Builder Skill v0.1",
-    version: 1,
+    name: "CT Elementor Builder Skill v0.2",
+    version: 2,
     kind: "build_practice",
     status: "CANDIDATE",
     scope: "build-practice",
     ownerAgentIds: [AGENT_IDS.A05],
     reviewerAgentIds: [AGENT_IDS.A06],
     content:
-      "Validated WordPress/Elementor implementation practice, foundation only: " +
+      "Validated WordPress/Elementor implementation practice with build manifest governance (CTOS-005B): " +
+      "Build strategy per section: LIBRARY_ASSEMBLY (reuse approved section library pattern) or NATIVE_NOVEL_BUILD (new construction requiring noveltyJustification). " +
+      "LIBRARY_ASSEMBLY is the default — NATIVE_NOVEL_BUILD requires explicit written justification why no library pattern fits. " +
+      "Build manifest (elementor_build_manifest artifact) must record strategy, libraryEntryId, and humanEditProtection flag per section. " +
+      "humanEditProtection=true sections must not be overwritten by subsequent agent passes without human approval. " +
+      "Design tokens (color, typography, spacing) consumed from the active DesignTokenSet — no per-page overrides; required token kinds: color, typography, spacing. " +
       "Build with native Elementor containers/widgets first — avoid giant custom HTML blobs; keep construction editable-first so a human can adjust it in the editor afterward; " +
       "use the global Site Kit (colours, type, spacing) rather than per-page overrides; scope custom CSS narrowly and use custom JS only when a native option genuinely does not exist; " +
       "any structured Elementor write (via the REST/DB layer) must be re-read and parsed immediately after writing, to confirm it saved as intended, not assumed from a 200 response; " +
@@ -414,7 +419,7 @@ const skills: Skill[] = [
       "verify Elementor page/template CSS actually propagated (not just that the save call succeeded); browser render validation is required — HTTP 200 is not visual QA; " +
       "validate with real CDP viewport emulation at 1440/1254/1024/768/480/375; check shared header/footer consistency across templates; " +
       "the builder never certifies its own final visual quality (Agent 03/06 do, via the CT Visual Design Skill); all work stays isolated from production until a human approves it, and every risky change has a stated rollback plan before it is made.",
-    evidence: ["U-Proof Elementor build — global Site Kit usage", "U-Proof structured write verification practice"],
+    evidence: ["U-Proof Elementor build — global Site Kit usage", "U-Proof structured write verification practice", "CTOS-005B build manifest governance"],
     supersedesId: null,
     approvedBy: null,
     approvedById: null,
@@ -1030,4 +1035,11 @@ export const seedData: OSData = {
   curationCandidates: [],
   screenshotEvidence: [],
   modeBJobs: [],
+  // CTOS-005B additions
+  visualReferences: [],
+  signatureVisualElements: [],
+  sectionLibrary: SECTION_LIBRARY_DEFAULTS,
+  designTokenSets: [],
+  visualDefects: [],
+  designContentReconciliations: [],
 };

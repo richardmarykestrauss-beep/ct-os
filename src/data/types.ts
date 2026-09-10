@@ -270,6 +270,10 @@ export type ArtifactType =
   | "agent_benchmark_report"
   | "blind_benchmark_report"
   | "cross_site_agent_evaluation"
+  | "design_direction"
+  | "page_composition"
+  | "visual_review"
+  | "elementor_build_manifest"
   | "other";
 
 export type ArtifactStatus = "DRAFT" | "FINAL" | "SUPERSEDED" | "REJECTED";
@@ -1323,4 +1327,312 @@ export interface OSData {
   curationCandidates: CurationCandidate[];
   screenshotEvidence: ScreenshotEvidence[];
   modeBJobs: ModeBJob[];
+  // CTOS-005B additions (default to [] in all existing seeds/EMPTY objects)
+  visualReferences: VisualReference[];
+  signatureVisualElements: SignatureVisualElement[];
+  sectionLibrary: SectionLibraryEntry[];
+  designTokenSets: DesignTokenSet[];
+  visualDefects: VisualDefect[];
+  designContentReconciliations: DesignContentReconciliation[];
+}
+
+// ---------------------------------------------------------------------------
+// CTOS-005B: Visual Intelligence + Creative Director v0.2 + Builder Quality Foundation
+// ---------------------------------------------------------------------------
+
+// Console error record (moved here from qa-checks.ts for use in ExtendedScreenshotEvidence)
+export type ConsoleErrorKind = "error" | "warning" | "info";
+export interface ConsoleErrorRecord {
+  kind: ConsoleErrorKind;
+  message: string;
+  source?: string;
+  lineNumber?: number;
+}
+
+// Part 2 — Visual Design Rubric (18 dimensions, bounded 1–5 scores, verdicts A/B/C)
+export type VisualRubricDimension =
+  | "BRAND_ALIGNMENT"
+  | "VISUAL_HIERARCHY"
+  | "LAYOUT_COMPOSITION"
+  | "SPACING_RHYTHM"
+  | "TYPOGRAPHY"
+  | "COLOR_USE"
+  | "IMAGERY"
+  | "NAVIGATION"
+  | "CTA_CLARITY"
+  | "CONVERSION_CLARITY"
+  | "TRUST"
+  | "CONTENT_CLARITY"
+  | "RESPONSIVENESS"
+  | "MOBILE_USABILITY"
+  | "PRODUCT_PRESENTATION"
+  | "ORIGINALITY"
+  | "POLISH"
+  | "TECHNICAL_VISUAL_DEFECTS";
+
+export const VISUAL_RUBRIC_DIMENSIONS: VisualRubricDimension[] = [
+  "BRAND_ALIGNMENT", "VISUAL_HIERARCHY", "LAYOUT_COMPOSITION", "SPACING_RHYTHM",
+  "TYPOGRAPHY", "COLOR_USE", "IMAGERY", "NAVIGATION", "CTA_CLARITY", "CONVERSION_CLARITY",
+  "TRUST", "CONTENT_CLARITY", "RESPONSIVENESS", "MOBILE_USABILITY", "PRODUCT_PRESENTATION",
+  "ORIGINALITY", "POLISH", "TECHNICAL_VISUAL_DEFECTS",
+];
+
+// A = client-ready, B = polish pass needed (list exactly what), C = not ready (list why)
+export type VisualRubricVerdict = "A" | "B" | "C";
+
+export interface RubricScore {
+  dimension: VisualRubricDimension;
+  score: 1 | 2 | 3 | 4 | 5;
+  verdict: VisualRubricVerdict;
+  rationale: string;
+  evidence: string[];
+}
+
+export interface VisualDesignRubricResult {
+  projectId: string;
+  jobId: string | null;
+  scores: RubricScore[];
+  overallVerdict: VisualRubricVerdict;
+  // Dimensions scoring 1 — never averaged away, always surfaced explicitly
+  criticalDimensions: VisualRubricDimension[];
+  blockingIssues: string[];
+  summary: string;
+  assessedAt: ISODate | null;
+}
+
+// Part 3 — Anti-generic design rules
+export interface AntiGenericRule {
+  id: string;
+  description: string;
+  challengesPattern: string;
+  preferredApproach: string;
+}
+
+// Part 4 — Signature visual element concept
+export type SignatureVisualElementStatus = "PROPOSED" | "APPROVED" | "REJECTED";
+
+export interface SignatureVisualElement {
+  id: string;
+  projectId: string;
+  description: string;
+  rationale: string;
+  status: SignatureVisualElementStatus;
+  proposedByAgentId: string | null;
+  approvedBy: string | null;
+  approvedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// Part 5 — Visual Reference System (human-curated, human-approval-gated; Part 22: safe modes)
+export type VisualReferenceMode = "REPLICATE" | "MODERNIZE" | "REIMAGINE";
+
+export interface VisualReference {
+  id: string;
+  projectId: string;
+  url: string;
+  title: string;
+  description: string;
+  mode: VisualReferenceMode;
+  /** Always true — references must be human-curated; agents may propose but never add directly. */
+  addedByHuman: boolean;
+  approvedBy: string;
+  approvedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// Part 6 — Extended screenshot evidence model (5 canonical viewports + DPR + scroll + source type)
+export type ScreenshotViewport = 1440 | 1024 | 768 | 480 | 375;
+export const SCREENSHOT_VIEWPORTS: ScreenshotViewport[] = [1440, 1024, 768, 480, 375];
+export const REQUIRED_VIEWPORTS: ScreenshotViewport[] = [1440, 375]; // desktop + mobile required
+
+export type ScreenshotSourceType = "CT_OS_CAPTURE" | "HUMAN_UPLOAD" | "TOOL_CAPTURE";
+
+export interface ExtendedScreenshotEvidence {
+  id: string;
+  projectId: string;
+  jobId: string | null;
+  url: string;
+  viewport: ScreenshotViewport;
+  widthPx: number;
+  heightPx: number;
+  dpr: number;
+  scrollPosition: number;
+  sourceType: ScreenshotSourceType;
+  capturedAt: ISODate | null;
+  captureStatus: "captured" | "failed" | "pending";
+  consoleErrors: ConsoleErrorRecord[];
+  loadErrors: string[];
+}
+
+// Part 7 — Screenshot set validation
+export type ScreenshotSetIssueKind =
+  | "missing_desktop"
+  | "missing_mobile"
+  | "failed_capture"
+  | "mismatch"
+  | "duplicate_viewport"
+  | "stale_evidence";
+
+export interface ScreenshotSetIssue {
+  kind: ScreenshotSetIssueKind;
+  viewport?: ScreenshotViewport;
+  detail: string;
+}
+
+export interface ScreenshotSetValidationResult {
+  valid: boolean;
+  issues: ScreenshotSetIssue[];
+  coverage: ScreenshotViewport[];
+  missingViewports: ScreenshotViewport[];
+}
+
+// Part 8 — Visual comparison types
+export type VisualComparisonKind =
+  | "CURRENT_VS_REFERENCE"
+  | "BEFORE_VS_AFTER"
+  | "DESKTOP_VS_MOBILE"
+  | "BUILD_VS_COMPOSITION"
+  | "REVISION_VS_PREVIOUS";
+
+export type VisualComparisonFindingKind =
+  | "missing_section"
+  | "geometry_diff"
+  | "hierarchy_mismatch"
+  | "color_inconsistency"
+  | "typography_inconsistency"
+  | "spacing_inconsistency"
+  | "content_mismatch"
+  | "layout_broken";
+
+export interface VisualComparisonFinding {
+  kind: VisualComparisonFindingKind;
+  description: string;
+  severity: QASeverity;
+  viewport?: ScreenshotViewport;
+}
+
+export interface VisualComparison {
+  id: string;
+  projectId: string;
+  jobId: string | null;
+  kind: VisualComparisonKind;
+  findings: VisualComparisonFinding[];
+  summary: string;
+  createdAt: ISODate | null;
+}
+
+// Parts 11–13 — Section Library data model + build strategy + novelty governance
+export type SectionLibraryStatus = "CANDIDATE" | "APPROVED" | "DEPRECATED";
+export type BuildStrategy = "LIBRARY_ASSEMBLY" | "NATIVE_NOVEL_BUILD";
+
+export interface SectionLibraryEntry {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  status: SectionLibraryStatus;
+  buildStrategy: BuildStrategy;
+  /** Required when buildStrategy is NATIVE_NOVEL_BUILD — must justify why library is insufficient. */
+  noveltyJustification?: string;
+  evidence: string[];
+  approvedBy: string | null;
+  approvedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// Part 14 — Design tokens
+export type DesignTokenKind =
+  | "color"
+  | "typography"
+  | "spacing"
+  | "border_radius"
+  | "shadow"
+  | "container_width"
+  | "breakpoint"
+  | "button"
+  | "form"
+  | "image_treatment"
+  | "icon_treatment";
+
+export interface DesignToken {
+  key: string;
+  value: string;
+  kind: DesignTokenKind;
+  usage: string;
+}
+
+export interface DesignTokenSet {
+  id: string;
+  projectId: string;
+  version: number;
+  tokens: DesignToken[];
+  approvedBy: string | null;
+  approvedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// Part 17 — Design↔Content reconciliation
+export type ReconciliationStatus =
+  | "OPEN"
+  | "RESOLVED_BY_CONTENT"
+  | "RESOLVED_BY_DESIGN"
+  | "NEEDS_HUMAN";
+
+export interface DesignContentReconciliation {
+  id: string;
+  projectId: string;
+  description: string;
+  status: ReconciliationStatus;
+  designArtifactId: string | null;
+  contentArtifactId: string | null;
+  resolvedBy: string | null;
+  resolvedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// Part 20 — Visual defect model (typed categories, canonical severity)
+export type VisualDefectCategory =
+  | "LAYOUT"
+  | "SPACING"
+  | "TYPOGRAPHY"
+  | "COLOR"
+  | "IMAGE"
+  | "OVERFLOW"
+  | "ALIGNMENT"
+  | "RESPONSIVE"
+  | "NAVIGATION"
+  | "CTA"
+  | "CONTENT_PRESENTATION"
+  | "BRAND"
+  | "ACCESSIBILITY_VISUAL"
+  | "GENERIC_DESIGN"
+  | "IMPLEMENTATION_MISMATCH";
+
+export interface VisualDefect {
+  id: string;
+  projectId: string;
+  jobId: string | null;
+  category: VisualDefectCategory;
+  severity: QASeverity;
+  description: string;
+  evidence: string[];
+  viewport?: ScreenshotViewport;
+  status: QAItemStatus;
+  detectedByAgentId: string | null;
+  createdAt: ISODate | null;
+  resolvedAt: ISODate | null;
+}
+
+// Part 23 — Evidence-grounded claims (OBSERVED/INFERRED/PROPOSED/VERIFIED)
+export type EvidenceClaimKind = "OBSERVED" | "INFERRED" | "PROPOSED" | "VERIFIED";
+
+export interface EvidenceClaim {
+  id: string;
+  kind: EvidenceClaimKind;
+  claim: string;
+  evidence: string[];
+  confidence: number;
+  madeByAgentId: string | null;
+  jobId: string | null;
+  createdAt: ISODate | null;
 }
