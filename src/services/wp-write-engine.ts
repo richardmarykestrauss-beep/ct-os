@@ -783,9 +783,12 @@ async function executeAction(
       const field = action.type === "UPDATE_META_DESCRIPTION" ? "meta_description"
         : action.type === "UPDATE_PAGE_TITLE" ? "title"
         : "slug";
-      await adapter.updatePageMeta(pageId, { [field]: value });
+      // Use updatePageContent (not updatePageMeta) so title/slug are sent as top-level WP REST fields,
+      // not wrapped inside meta: {} which would target custom post meta, not the page title or slug.
+      const write = await adapter.updatePageContent(pageId, { field, value });
       const after = await adapter.getPage(pageId);
-      return { actionId: action.id, type: action.type, status: "SUCCEEDED", beforeValue: null, afterValue: value, error: null, verificationPassed: after !== null };
+      const verified = after?.contentHash === write.afterStateHash;
+      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: null, afterValue: value, error: verified ? null : "Read-back hash mismatch", verificationPassed: verified };
     }
 
     case "CREATE_DRAFT_PAGE": {
