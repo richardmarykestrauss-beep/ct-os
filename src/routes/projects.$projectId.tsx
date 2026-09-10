@@ -35,6 +35,7 @@ import { ARTIFACT_TYPE_LABELS } from "@/services/artifacts";
 import { JOB_STATUS_LABELS } from "@/services/agent-jobs";
 import { PROVIDER_LABELS } from "@/ai/registry";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Eye, FlaskConical, Play, ShieldCheck, ThumbsUp } from "lucide-react";
+import { VisualReviewStatusPanel } from "@/components/os/VisualReviewStatus";
 
 type Tab = "overview" | "pages" | "tickets" | "agents" | "artifacts" | "runs" | "qa" | "approvals" | "activity";
 
@@ -345,6 +346,7 @@ function ProjectDetail() {
                   <CardContent className="text-xs text-muted">{launchApproval.notes ?? "Human approval required."}</CardContent>
                 </Card>
               ) : null}
+              <VisualReviewStatusPanel projectId={project.id} data={data} />
               <Card>
                 <CardHeader>
                   <CardTitle>Client</CardTitle>

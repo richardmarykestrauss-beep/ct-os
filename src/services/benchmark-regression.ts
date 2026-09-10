@@ -137,6 +137,133 @@ export function assertProjectIsolation(
 }
 
 // ---------------------------------------------------------------------------
+// Visual context isolation (CTOS-005B Part 30)
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify that CTOS-005B visual context from project A cannot appear in project B's
+ * visual data arrays. This is a deterministic fixture-level regression test — it proves
+ * the isolation contract without running a live benchmark.
+ *
+ * Checks:
+ *   - Visual references (PROJECT-scoped, have projectId)
+ *   - Signature visual elements (PROJECT-scoped)
+ *   - Design token sets (PROJECT-scoped)
+ *   - Visual defects (PROJECT-scoped)
+ *   - Design↔content reconciliations (PROJECT-scoped)
+ *   - Screenshot evidence (PROJECT-scoped)
+ *   - Agent lessons (PROJECT-scoped when not DOCTRINE/AGENCY)
+ *   - Artifacts: design_direction, page_composition, visual_review, elementor_build_manifest
+ *
+ * DOCTRINE- and AGENCY-scoped knowledge remains shared (allowed by governance).
+ * Fails closed: any cross-project reference is a violation.
+ */
+export function assertVisualContextIsolation(
+  data: OSData,
+  projectAId: string,
+  projectBId: string,
+): { isolated: boolean; violations: string[] } {
+  const violations: string[] = [];
+
+  const aId = projectAId;
+  const bId = projectBId;
+
+  // Visual references
+  const aVisualRefIds = new Set(data.visualReferences.filter((r) => r.projectId === aId).map((r) => r.id));
+  for (const r of data.visualReferences.filter((r) => r.projectId === bId)) {
+    if (aVisualRefIds.has(r.id)) {
+      violations.push(`VisualReference ${r.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Signature visual elements
+  const aSigIds = new Set(data.signatureVisualElements.filter((e) => e.projectId === aId).map((e) => e.id));
+  for (const e of data.signatureVisualElements.filter((e) => e.projectId === bId)) {
+    if (aSigIds.has(e.id)) {
+      violations.push(`SignatureVisualElement ${e.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Design token sets
+  const aTokenIds = new Set(data.designTokenSets.filter((t) => t.projectId === aId).map((t) => t.id));
+  for (const t of data.designTokenSets.filter((t) => t.projectId === bId)) {
+    if (aTokenIds.has(t.id)) {
+      violations.push(`DesignTokenSet ${t.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Visual defects
+  const aDefectIds = new Set(data.visualDefects.filter((d) => d.projectId === aId).map((d) => d.id));
+  for (const d of data.visualDefects.filter((d) => d.projectId === bId)) {
+    if (aDefectIds.has(d.id)) {
+      violations.push(`VisualDefect ${d.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Design↔content reconciliations
+  const aRecIds = new Set(data.designContentReconciliations.filter((r) => r.projectId === aId).map((r) => r.id));
+  for (const r of data.designContentReconciliations.filter((r) => r.projectId === bId)) {
+    if (aRecIds.has(r.id)) {
+      violations.push(`DesignContentReconciliation ${r.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Screenshot evidence — project B must not reference project A's captured screenshots
+  const aShotIds = new Set(data.screenshotEvidence.filter((s) => s.projectId === aId).map((s) => s.id));
+  for (const s of data.screenshotEvidence.filter((s) => s.projectId === bId)) {
+    if (aShotIds.has(s.id)) {
+      violations.push(`ScreenshotEvidence ${s.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Visual artifacts — design_direction, page_composition, visual_review, elementor_build_manifest
+  const visualArtifactTypes = new Set(["design_direction", "page_composition", "visual_review", "elementor_build_manifest"]);
+  const aVisualArtIds = new Set(
+    data.artifacts.filter((a) => a.projectId === aId && visualArtifactTypes.has(a.type)).map((a) => a.id),
+  );
+  for (const a of data.artifacts.filter((a) => a.projectId === bId && visualArtifactTypes.has(a.type))) {
+    if (aVisualArtIds.has(a.id)) {
+      violations.push(`Visual artifact ${a.id} (type: ${a.type}) appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  // Jobs: project B visual jobs must not reference project A's visual artifacts as inputs
+  const bVisualJobs = data.agentJobs.filter(
+    (j) => j.projectId === bId && (j.taskType === "visual_review" || j.taskType === "creative_direction"),
+  );
+  for (const job of bVisualJobs) {
+    for (const inputId of job.inputArtifactIds) {
+      const art = data.artifacts.find((a) => a.id === inputId);
+      if (art && art.projectId === aId) {
+        violations.push(
+          `Visual job ${job.id} in project B (${bId}) references artifact ${inputId} (type: ${art.type}) from project A (${aId})`,
+        );
+      }
+    }
+  }
+
+  // Agent lessons — PROJECT-scoped lessons must not cross projects
+  // DOCTRINE and AGENCY are intentionally shared (no violation)
+  const aLessonIds = new Set(
+    data.agentLessons.filter((l) => l.projectId === aId).map((l) => l.id),
+  );
+  for (const lesson of data.agentLessons.filter((l) => l.projectId === bId)) {
+    if (aLessonIds.has(lesson.id)) {
+      violations.push(`AgentLesson ${lesson.id} appears in both project A (${aId}) and project B (${bId})`);
+    }
+  }
+
+  return { isolated: violations.length === 0, violations };
+}
+
+/** Verify that all required CTOS-005A+005B schemas are registered in the SCHEMAS map. */
+export function assertRequiredSchemas005B(): { ok: boolean; missing: string[] } {
+  const required = ["design_direction@1", "page_composition@1", "visual_review@1", "elementor_build_manifest@1"];
+  const missing = required.filter((k) => !schemasAsMap[k]);
+  return { ok: missing.length === 0, missing };
+}
+
+// ---------------------------------------------------------------------------
 // Schema presence check
 // ---------------------------------------------------------------------------
 
