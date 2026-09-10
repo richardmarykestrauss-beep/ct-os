@@ -589,13 +589,17 @@ describe("ADD_APPROVED_SECTION enforcement", () => {
     expect(result.issues.some((i) => i.includes("DEPRECATED"))).toBe(true);
   });
 
-  it("accepts APPROVED section", async () => {
+  it("accepts APPROVED section (validation passes; execution deferred — not supported via targeted patch)", async () => {
+    // Validation: the plan passes (APPROVED library entry exists).
     const data = dataWithSection("APPROVED");
-    const adapter = new FakeWordPressAdapter({ pages: [homePage] });
     const { data: d1, plan } = createChangePlan(data, { projectId: PROJECT_ID, siteConnectionId: SITE_CONN_ID, sourceRequest: "test", actions: [makeSectionAction("sec_lib_001")] }, makeOpts());
     const d2 = approveChangePlan(d1, plan.id, "approver_1", "Admin", makeOpts());
-    const result = await executeChangePlan(d2.data, { planId: plan.id }, adapter, makeOpts());
-    expect(result.ok).toBe(true);
+    const validationResult = validateChangePlan(d2.data, plan.id);
+    expect(validationResult.ok).toBe(true);
+    // Execution: ADD_APPROVED_SECTION is not supported via the CT Bridge targeted patch endpoint.
+    const adapter = new FakeWordPressAdapter({ pages: [homePage] });
+    const execResult = await executeChangePlan(d2.data, { planId: plan.id }, adapter, makeOpts());
+    expect(execResult.ok).toBe(false);
   });
 
   it("rejects unknown section ID (missing libraryEntryId)", async () => {

@@ -13,6 +13,8 @@
 import type {
   ElementorDocument,
   ElementorNode,
+  ElementorBridgePatch,
+  ElementorBridgeRollback,
 } from "@/data/types";
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,23 @@ export interface WordPressAdapter {
   updatePageContent(pageId: string, params: { field: string; value: string }): Promise<WpWritePrimitive>;
   updatePageMeta(pageId: string, meta: Record<string, string>): Promise<WpWritePrimitive>;
   updateElementorDocument(pageId: string, doc: ElementorDocument): Promise<WpWritePrimitive>;
+  /**
+   * Apply a TARGETED mutation to one Elementor element via the CT Bridge.
+   * Only SET_WIDGET_TEXT | SET_WIDGET_LINK | SET_IMAGE | SET_SETTING are permitted.
+   * Arbitrary full-document replacement is not accepted.
+   */
+  applyElementorPatch(pageId: string, patch: ElementorBridgePatch): Promise<WpWritePrimitive>;
+  /**
+   * Fetch raw Elementor snapshot data for pre-write archival.
+   * Returns the bridge GET response (document_hash + raw elementor_data nodes)
+   * without converting to typed nodes — preserving exact JSON for rollback hash fidelity.
+   */
+  getElementorSnapshot(pageId: string): Promise<{ documentHash: string; rawNodes: unknown[] } | null>;
+  /**
+   * Restore a prior Elementor document from a CT-OS snapshot via the bridge rollback endpoint.
+   * Gated by snapshot hash integrity and current-document conflict protection.
+   */
+  rollbackElementorDocument(pageId: string, params: ElementorBridgeRollback): Promise<WpWritePrimitive>;
   createRevisionSnapshot(pageId: string): Promise<{ snapshotToken: string; revisionId: string; contentHash: string }>;
   restoreRevisionSnapshot(pageId: string, revisionId: string): Promise<WpWritePrimitive>;
 }
@@ -262,6 +281,75 @@ export class FakeWordPressAdapter implements WordPressAdapter {
     const updated = { ...p, elementorDoc: updatedDoc, modifiedAt: new Date().toISOString() };
     this.pages.set(pageId, updated);
     return { resultToken: `tok_elmt_${pageId}`, afterStateHash: updatedDoc.documentHash };
+  }
+
+  async applyElementorPatch(pageId: string, patch: ElementorBridgePatch): Promise<WpWritePrimitive> {
+    this.log("applyElementorPatch", [pageId, patch]);
+    if (this.config.offline) throw new Error("Site offline");
+    if (pageId === this.config.writeFailPageId) throw new Error("Simulated write failure");
+    const p = this.pages.get(pageId);
+    if (!p) throw new Error(`Page ${pageId} not found`);
+    // Conflict check
+    const currentDoc = p.elementorDoc ?? { pageId, version: "fake", documentHash: p.contentHash, nodes: [] };
+    if (currentDoc.documentHash !== patch.expectedDocumentHash) {
+      throw new Error(`conflict_detected: document changed since read (expected ${patch.expectedDocumentHash})`);
+    }
+    // Apply patch to in-memory doc (simplified: just update the matching node's settings)
+    function applyToNodes(nodes: ElementorNode[]): ElementorNode[] {
+      return nodes.map((n) => {
+        if (n.id === patch.elementId) {
+          const settings = { ...n.settings };
+          switch (patch.operation) {
+            case "SET_WIDGET_TEXT":
+              Object.assign(settings, { title: patch.value, editor: patch.value, button_text: patch.value });
+              break;
+            case "SET_WIDGET_LINK":
+              settings["button_url"] = patch.value;
+              break;
+            case "SET_IMAGE":
+              settings["image"] = patch.value;
+              break;
+            case "SET_SETTING":
+              if (patch.key) settings[patch.key] = patch.value;
+              break;
+          }
+          return { ...n, settings };
+        }
+        return { ...n, children: applyToNodes(n.children) };
+      });
+    }
+    const newNodes = applyToNodes(currentDoc.nodes);
+    const newHash = fakeHash(`patch_${pageId}_${patch.elementId}_${JSON.stringify(patch.value)}`);
+    const updatedDoc = { ...currentDoc, nodes: newNodes, documentHash: newHash };
+    const updated = { ...p, elementorDoc: updatedDoc, modifiedAt: new Date().toISOString() };
+    this.pages.set(pageId, updated);
+    return { resultToken: `tok_patch_${pageId}_${patch.elementId}`, afterStateHash: newHash };
+  }
+
+  async getElementorSnapshot(pageId: string): Promise<{ documentHash: string; rawNodes: unknown[] } | null> {
+    this.log("getElementorSnapshot", [pageId]);
+    const p = this.pages.get(pageId);
+    if (!p) return null;
+    const doc = p.elementorDoc ?? { pageId, version: "fake", documentHash: p.contentHash, nodes: [] };
+    // Return a simplified raw representation (typed nodes without _preserved for fake)
+    return { documentHash: doc.documentHash, rawNodes: doc.nodes as unknown[] };
+  }
+
+  async rollbackElementorDocument(pageId: string, params: ElementorBridgeRollback): Promise<WpWritePrimitive> {
+    this.log("rollbackElementorDocument", [pageId, params]);
+    if (this.config.offline) throw new Error("Site offline");
+    const p = this.pages.get(pageId);
+    if (!p) throw new Error(`Page ${pageId} not found`);
+    const currentDoc = p.elementorDoc ?? { pageId, version: "fake", documentHash: p.contentHash, nodes: [] };
+    if (currentDoc.documentHash !== params.expectedCurrentHash) {
+      throw new Error(`conflict_detected: document changed since rollback was initiated`);
+    }
+    // Restore the snapshot nodes
+    const restoredHash = fakeHash(`rollback_${pageId}_${JSON.stringify(params.elementorData)}`);
+    const restoredDoc = { pageId, version: "fake", documentHash: restoredHash, nodes: params.elementorData as ElementorNode[] };
+    const updated = { ...p, elementorDoc: restoredDoc, modifiedAt: new Date().toISOString() };
+    this.pages.set(pageId, updated);
+    return { resultToken: `tok_rollback_${pageId}`, afterStateHash: restoredHash };
   }
 
   async createRevisionSnapshot(pageId: string): Promise<{ snapshotToken: string; revisionId: string; contentHash: string }> {

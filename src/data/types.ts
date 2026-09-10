@@ -1799,6 +1799,15 @@ export interface WebsiteRevisionSnapshot {
   contentHash: string | null;
   originatingJobId: string | null;
   originatingChangePlanId: string | null;
+  /**
+   * Raw Elementor nodes captured before a write (bridge GET elementor_data).
+   * Stored inline for MVP rollback — this is the payload sent to the bridge rollback endpoint.
+   * Never derived by reconstructing from typed nodes: round-trip JSON key ordering
+   * must match the PHP-computed snapshot_hash exactly.
+   */
+  elementorSnapshotRaw: unknown[] | null;
+  /** PHP-computed SHA-256 hash of the snapshot (document_hash from bridge GET). */
+  elementorSnapshotHash: string | null;
 }
 
 // Part 11 — Write result
@@ -1903,6 +1912,43 @@ export interface ElementorDocument {
   /** SHA-256 of the canonical document JSON — used for precondition checks. */
   documentHash: string;
   nodes: ElementorNode[];
+}
+
+// Part 14b — CT Bridge targeted patch contract
+// These are the ONLY operations accepted by the PATCH bridge endpoint.
+export type ElementorMvpOperation =
+  | "SET_WIDGET_TEXT"
+  | "SET_WIDGET_LINK"
+  | "SET_IMAGE"
+  | "SET_SETTING";
+
+/**
+ * Targeted patch sent to POST /ctos/v1/elementor/{pageId} (bridge PATCH endpoint).
+ * Mutates exactly ONE setting on ONE element. No full-document replacement.
+ */
+export interface ElementorBridgePatch {
+  expectedDocumentHash: string;
+  operation: ElementorMvpOperation;
+  elementId: string;
+  expectedElementType: ElementorNodeType;
+  expectedCurrentValue?: unknown;
+  /** Required for SET_SETTING — must be in the safe style whitelist. */
+  key?: string;
+  value: unknown;
+}
+
+/**
+ * Payload sent to POST /ctos/v1/elementor/{pageId}/rollback.
+ * Gated by snapshot integrity (elementorData must hash to snapshotHash)
+ * and conflict protection (expectedCurrentHash must match live document).
+ */
+export interface ElementorBridgeRollback {
+  /** PHP-computed SHA-256 the snapshot data must reproduce. */
+  snapshotHash: string;
+  /** Current document hash — prevents overwriting concurrent human edits. */
+  expectedCurrentHash: string;
+  /** Raw Elementor nodes from the original bridge GET snapshot. */
+  elementorData: unknown[];
 }
 
 // Part 15 — Elementor patch operations

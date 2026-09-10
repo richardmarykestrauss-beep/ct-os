@@ -196,16 +196,22 @@ describe("updatePageContent", () => {
 // ---------------------------------------------------------------------------
 
 describe("endpoint allowlist", () => {
-  it("rejects calls to arbitrary plugin endpoints", async () => {
-    const fetch = vi.fn().mockResolvedValue(mockResponse({}));
-    // Bypass request() directly by casting — we test that assertAllowedUrl blocks
+  it("allows the CT Bridge elementor endpoint", async () => {
+    // getElementorDocument now calls the bridge; a successful mock confirms the
+    // endpoint passes the allowlist (if it were blocked, fetch would never be called
+    // and an allowlist error would be thrown instead).
+    const fetch = vi.fn().mockResolvedValue(mockResponse({
+      page_id: 42,
+      elementor_managed: true,
+      elementor_edit_mode: "builder",
+      document_hash: "a".repeat(64),
+      elementor_data: [],
+    }));
     const adapter = makeAdapter(fetch);
-    // Calling through the internal request method isn't directly accessible,
-    // so we verify getElementorDocument returns null without hitting a forbidden path.
     const result = await adapter.getElementorDocument("42");
-    expect(result).toBeNull();
-    // fetch should NOT have been called (we return null without a network call)
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0][0]).toContain("/wp-json/ctos/v1/elementor/42");
+    expect(result).not.toBeNull();
   });
 });
 
@@ -214,12 +220,11 @@ describe("endpoint allowlist", () => {
 // ---------------------------------------------------------------------------
 
 describe("updateElementorDocument", () => {
-  it("throws a clear unsupported error (CT Bridge required)", async () => {
-    const fetch = vi.fn();
-    const adapter = makeAdapter(fetch);
+  it("throws — full-document write not supported via CT Bridge (use applyElementorPatch)", async () => {
+    const adapter = makeAdapter(vi.fn());
     await expect(
-      adapter.updateElementorDocument("42", { pageId: "42", version: "3.20", documentHash: "x", nodes: [] }),
-    ).rejects.toThrow(/CT Bridge/i);
+      adapter.updateElementorDocument("42", { pageId: "42", version: "bridge", documentHash: "a".repeat(64), nodes: [] }),
+    ).rejects.toThrow(/applyElementorPatch/i);
   });
 });
 

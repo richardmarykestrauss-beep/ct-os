@@ -45,7 +45,7 @@ import type {
   WpSiteConnectionChecklist,
   WordPressSiteConnection,
   ElementorNode,
-  ElementorDocument,
+  ElementorBridgePatch,
 } from "@/data/types";
 import type { WordPressAdapter } from "./wp-adapter";
 import {
@@ -384,9 +384,33 @@ export async function executeChangePlan(
 
   // Step 9: create revision snapshot (FAILS CLOSED — write blocked if snapshot fails)
   let snapshotId: string | null = null;
+  const elementorActionTypes = new Set([
+    "REPLACE_IMAGE", "UPDATE_WIDGET_CONTENT", "UPDATE_WIDGET_STYLE_SAFE", "UPDATE_CONTAINER_SETTINGS_SAFE",
+  ]);
+  const hasElementorActions = plan.actions.some((a) => elementorActionTypes.has(a.type));
+
   if (plan.backupRequired && targetPageId) {
     try {
       const snap = await adapter.createRevisionSnapshot(targetPageId);
+
+      // Also capture Elementor snapshot when any action modifies Elementor data.
+      // This is stored inline (elementorSnapshotRaw) so the rollback endpoint can
+      // send the exact raw bytes back — preserving PHP hash fidelity.
+      let elementorSnapshotRaw: unknown[] | null = null;
+      let elementorSnapshotHash: string | null = null;
+      if (hasElementorActions) {
+        try {
+          const elSnap = await adapter.getElementorSnapshot(targetPageId);
+          if (elSnap) {
+            elementorSnapshotRaw = elSnap.rawNodes;
+            elementorSnapshotHash = elSnap.documentHash;
+          }
+        } catch {
+          // Non-fatal: Elementor snapshot failure does not block the write.
+          // The bridge may not be installed yet; the WP revision snapshot still protects content.
+        }
+      }
+
       const snapshot: WebsiteRevisionSnapshot = {
         id: newId("snap"),
         projectId: plan.projectId,
@@ -395,11 +419,13 @@ export async function executeChangePlan(
         environment: conn.environment,
         capturedAt: now(),
         sourceRevision: snap.revisionId,
-        elementorDocumentRef: null, // reference-only: actual payload on storage
+        elementorDocumentRef: null,
         pageContentRef: null,
         contentHash: snap.contentHash,
         originatingJobId: plan.executingJobId,
         originatingChangePlanId: plan.id,
+        elementorSnapshotRaw,
+        elementorSnapshotHash,
       };
       workData = { ...workData, websiteRevisionSnapshots: [...workData.websiteRevisionSnapshots, snapshot] };
       snapshotId = snapshot.id;
@@ -582,14 +608,33 @@ export async function rollbackWrite(
   let rollbackOk = false;
   let rollbackMessage = "";
   try {
-    const restored = await adapter.restoreRevisionSnapshot(snapshot.pageId, snapshot.sourceRevision);
-    // Read back to verify restoration
-    const verify = await adapter.getPage(snapshot.pageId);
-    if (verify?.contentHash === snapshot.contentHash || restored.afterStateHash === snapshot.contentHash) {
-      rollbackOk = true;
-      rollbackMessage = `Restored to revision ${snapshot.sourceRevision}`;
+    if (snapshot.elementorSnapshotRaw !== null && snapshot.elementorSnapshotHash !== null) {
+      // Elementor rollback path: targeted bridge rollback with snapshot integrity gate
+      const currentElDoc = await adapter.getElementorDocument(snapshot.pageId);
+      if (!currentElDoc) throw new Error(`Could not read current Elementor document for page ${snapshot.pageId}`);
+      const write = await adapter.rollbackElementorDocument(snapshot.pageId, {
+        snapshotHash: snapshot.elementorSnapshotHash,
+        expectedCurrentHash: currentElDoc.documentHash,
+        elementorData: snapshot.elementorSnapshotRaw,
+      });
+      if (write.afterStateHash !== "") {
+        rollbackOk = true;
+        rollbackMessage = `Elementor document rolled back to snapshot hash ${snapshot.elementorSnapshotHash.slice(0, 8)}…`;
+      } else {
+        rollbackMessage = `Elementor rollback read-back did not verify`;
+      }
     } else {
-      rollbackMessage = `Read-back after rollback did not match snapshot hash`;
+      // WordPress revision rollback path
+      if (!snapshot.sourceRevision) throw new Error("Snapshot has no WordPress revision ID");
+      const restored = await adapter.restoreRevisionSnapshot(snapshot.pageId, snapshot.sourceRevision);
+      // Read back to verify restoration
+      const verify = await adapter.getPage(snapshot.pageId);
+      if (verify?.contentHash === snapshot.contentHash || restored.afterStateHash === snapshot.contentHash) {
+        rollbackOk = true;
+        rollbackMessage = `Restored to revision ${snapshot.sourceRevision}`;
+      } else {
+        rollbackMessage = `Read-back after rollback did not match snapshot hash`;
+      }
     }
   } catch (e) {
     rollbackMessage = `Rollback threw: ${String(e)}`;
@@ -813,82 +858,107 @@ async function executeAction(
       if (node.type !== "image") return actionFail(action, `Target ${widgetId} is ${node.type}, expected image`);
       const newUrl = action.payload["url"] as string;
       const altText = action.payload["altText"] as string | undefined;
-      const patchedNode: typeof node = { ...node, settings: { ...node.settings, url: newUrl, ...(altText ? { alt: altText } : {}) } };
-      const patchedDoc = replaceNode(doc, widgetId, patchedNode);
-      const write = await adapter.updateElementorDocument(pageId, patchedDoc);
-      const afterDoc = await adapter.getElementorDocument(pageId);
-      const verified = afterDoc !== null && write.afterStateHash !== "";
-      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: node.settings["url"], afterValue: newUrl, error: null, verificationPassed: verified };
+      const imageValue = { url: newUrl, ...(altText ? { alt: altText } : {}) };
+      const patch: ElementorBridgePatch = {
+        expectedDocumentHash: doc.documentHash,
+        operation: "SET_IMAGE",
+        elementId: widgetId,
+        expectedElementType: "image",
+        expectedCurrentValue: node.settings["image"],
+        value: imageValue,
+      };
+      const write = await adapter.applyElementorPatch(pageId, patch);
+      const verified = write.afterStateHash !== "";
+      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: node.settings["url"], afterValue: newUrl, error: verified ? null : "Write failed", verificationPassed: verified };
     }
 
-    case "UPDATE_WIDGET_CONTENT":
-    case "UPDATE_WIDGET_STYLE_SAFE":
-    case "UPDATE_CONTAINER_SETTINGS_SAFE": {
+    case "UPDATE_WIDGET_CONTENT": {
       if (!pageId) return actionFail(action, "No target page ID");
-      const widgetId = action.target.widgetId ?? action.target.elementorElementId ?? action.target.containerId;
-      if (!widgetId) return actionFail(action, `${action.type} requires a widget/element/container target`);
+      const widgetId = action.target.widgetId ?? action.target.elementorElementId;
+      if (!widgetId) return actionFail(action, "UPDATE_WIDGET_CONTENT requires a widget/element target");
       const doc = await adapter.getElementorDocument(pageId);
       if (!doc) return actionFail(action, `Elementor document not found for page ${pageId}`);
       const node = findNode(doc.nodes, widgetId);
       if (!node) return actionFail(action, `Element ${widgetId} not found`);
-
-      // Safe style enforcement
-      if (action.type === "UPDATE_WIDGET_STYLE_SAFE") {
-        const key = action.payload["settingKey"] as string;
-        if (!isSafeStyleKey(key)) return actionFail(action, `Style key "${key}" not in GREEN whitelist`);
-      }
-
       const settingsUpdate = action.payload["settings"] as Record<string, unknown> ?? {};
       const beforeSettings = { ...node.settings };
-      const patchedNode: typeof node = { ...node, settings: { ...node.settings, ...settingsUpdate } };
-      const patchedDoc = replaceNode(doc, widgetId, patchedNode);
-      const write = await adapter.updateElementorDocument(pageId, patchedDoc);
+      // Pick the text key appropriate for the node type
+      const textKey = node.type === "heading" ? "title" : node.type === "text" ? "editor" : node.type === "button" ? "button_text" : "title";
+      const value = settingsUpdate[textKey] ?? Object.values(settingsUpdate)[0];
+      const patch: ElementorBridgePatch = {
+        expectedDocumentHash: doc.documentHash,
+        operation: "SET_WIDGET_TEXT",
+        elementId: widgetId,
+        expectedElementType: node.type,
+        value,
+      };
+      const write = await adapter.applyElementorPatch(pageId, patch);
       const verified = write.afterStateHash !== "";
-      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: beforeSettings, afterValue: patchedNode.settings, error: null, verificationPassed: verified };
+      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: beforeSettings, afterValue: settingsUpdate, error: null, verificationPassed: verified };
     }
 
-    case "ADD_APPROVED_SECTION": {
+    case "UPDATE_WIDGET_STYLE_SAFE": {
       if (!pageId) return actionFail(action, "No target page ID");
-      const sectionLibraryEntryId = action.payload["libraryEntryId"] as string;
-      // Approval enforced in validateChangePlan — by the time executeAction runs the entry is confirmed APPROVED
-      if (!sectionLibraryEntryId) return actionFail(action, "Section library entry ID required");
+      const widgetId = action.target.widgetId ?? action.target.elementorElementId;
+      if (!widgetId) return actionFail(action, "UPDATE_WIDGET_STYLE_SAFE requires a widget/element target");
+      const key = action.payload["settingKey"] as string;
+      if (!isSafeStyleKey(key)) return actionFail(action, `Style key "${key}" not in GREEN whitelist`);
       const doc = await adapter.getElementorDocument(pageId);
-      if (!doc) return actionFail(action, `Elementor document not found`);
-      const sectionNode = action.payload["sectionNode"] as typeof doc.nodes[0] | undefined;
-      if (!sectionNode) return actionFail(action, "ADD_APPROVED_SECTION requires sectionNode in payload");
-      const updatedDoc = { ...doc, nodes: [...doc.nodes, sectionNode] };
-      const write = await adapter.updateElementorDocument(pageId, updatedDoc);
+      if (!doc) return actionFail(action, `Elementor document not found for page ${pageId}`);
+      const node = findNode(doc.nodes, widgetId);
+      if (!node) return actionFail(action, `Element ${widgetId} not found`);
+      const settingsUpdate = action.payload["settings"] as Record<string, unknown> ?? {};
+      const value = settingsUpdate[key];
+      const patch: ElementorBridgePatch = {
+        expectedDocumentHash: doc.documentHash,
+        operation: "SET_SETTING",
+        elementId: widgetId,
+        expectedElementType: node.type,
+        key,
+        value,
+      };
+      const write = await adapter.applyElementorPatch(pageId, patch);
       const verified = write.afterStateHash !== "";
-      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: doc.nodes.length, afterValue: updatedDoc.nodes.length, error: null, verificationPassed: verified };
+      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: node.settings[key], afterValue: value, error: null, verificationPassed: verified };
     }
 
-    case "REMOVE_DRAFT_SECTION": {
+    case "UPDATE_CONTAINER_SETTINGS_SAFE": {
       if (!pageId) return actionFail(action, "No target page ID");
-      const sectionId = action.target.elementorElementId ?? action.payload["sectionId"] as string;
-      if (!sectionId) return actionFail(action, "REMOVE_DRAFT_SECTION requires sectionId");
+      const containerId = action.target.widgetId ?? action.target.elementorElementId ?? action.target.containerId;
+      if (!containerId) return actionFail(action, "UPDATE_CONTAINER_SETTINGS_SAFE requires a container target");
       const doc = await adapter.getElementorDocument(pageId);
-      if (!doc) return actionFail(action, "Elementor document not found");
-      const before = doc.nodes.length;
-      const updatedDoc = { ...doc, nodes: doc.nodes.filter((n) => n.id !== sectionId) };
-      if (updatedDoc.nodes.length === before) return actionFail(action, `Section ${sectionId} not found in document`);
-      const write = await adapter.updateElementorDocument(pageId, updatedDoc);
-      return { actionId: action.id, type: action.type, status: "SUCCEEDED", beforeValue: before, afterValue: updatedDoc.nodes.length, error: null, verificationPassed: write.afterStateHash !== "" };
+      if (!doc) return actionFail(action, `Elementor document not found for page ${pageId}`);
+      const node = findNode(doc.nodes, containerId);
+      if (!node) return actionFail(action, `Container ${containerId} not found`);
+      const settingsUpdate = action.payload["settings"] as Record<string, unknown> ?? {};
+      // Apply each setting as a separate targeted patch (re-fetching hash after each)
+      const beforeSettings = { ...node.settings };
+      let currentDocHash = doc.documentHash;
+      let lastWrite = { resultToken: "", afterStateHash: "" };
+      for (const [k, v] of Object.entries(settingsUpdate)) {
+        if (!isSafeStyleKey(k)) return actionFail(action, `Style key "${k}" not in GREEN whitelist`);
+        const patch: ElementorBridgePatch = {
+          expectedDocumentHash: currentDocHash,
+          operation: "SET_SETTING",
+          elementId: containerId,
+          expectedElementType: node.type,
+          key: k,
+          value: v,
+        };
+        lastWrite = await adapter.applyElementorPatch(pageId, patch);
+        currentDocHash = lastWrite.afterStateHash;
+      }
+      const verified = lastWrite.afterStateHash !== "";
+      return { actionId: action.id, type: action.type, status: verified ? "SUCCEEDED" : "FAILED", beforeValue: beforeSettings, afterValue: settingsUpdate, error: null, verificationPassed: verified };
     }
 
-    case "REORDER_DRAFT_SECTIONS": {
-      if (!pageId) return actionFail(action, "No target page ID");
-      const order = action.payload["sectionIds"] as string[];
-      if (!Array.isArray(order)) return actionFail(action, "REORDER_DRAFT_SECTIONS requires sectionIds array");
-      const doc = await adapter.getElementorDocument(pageId);
-      if (!doc) return actionFail(action, "Elementor document not found");
-      const nodeMap = new Map(doc.nodes.map((n) => [n.id, n]));
-      const reordered = order.map((id) => nodeMap.get(id)).filter(Boolean) as typeof doc.nodes;
-      // Preserve any nodes not in the order list at the end
-      const remaining = doc.nodes.filter((n) => !order.includes(n.id));
-      const updatedDoc = { ...doc, nodes: [...reordered, ...remaining] };
-      const write = await adapter.updateElementorDocument(pageId, updatedDoc);
-      return { actionId: action.id, type: action.type, status: "SUCCEEDED", beforeValue: doc.nodes.map((n) => n.id), afterValue: updatedDoc.nodes.map((n) => n.id), error: null, verificationPassed: write.afterStateHash !== "" };
-    }
+    case "ADD_APPROVED_SECTION":
+    case "REMOVE_DRAFT_SECTION":
+    case "REORDER_DRAFT_SECTIONS":
+      // Structural Elementor mutations (add/remove/reorder whole sections) require a
+      // full-document replacement which the CT Bridge targeted patch endpoint does not support.
+      // These operations are deferred to a future ticket with a dedicated bridge endpoint.
+      return actionFail(action, `${action.type}: structural Elementor mutations are not supported via the CT Bridge targeted patch endpoint. Defer this action.`);
 
     default:
       return actionFail(action, `Unsupported action type: ${(action as WpWriteAction).type}`);
@@ -907,15 +977,6 @@ function findNode(nodes: ElementorNode[], id: string): ElementorNode | undefined
     if (found) return found;
   }
   return undefined;
-}
-
-function replaceNode(doc: ElementorDocument, id: string, replacement: ElementorNode): ElementorDocument {
-  function replaceInList(nodes: ElementorNode[]): ElementorNode[] {
-    return nodes.map((n) =>
-      n.id === id ? replacement : { ...n, children: replaceInList(n.children) },
-    );
-  }
-  return { ...doc, nodes: replaceInList(doc.nodes) };
 }
 
 function fail(data: OSData, reason: WpEngineFailureReason, message: string): WpEngineFailure {

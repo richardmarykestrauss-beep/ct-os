@@ -13,6 +13,10 @@
  */
 import type {
   ElementorDocument,
+  ElementorNode,
+  ElementorNodeType,
+  ElementorBridgePatch,
+  ElementorBridgeRollback,
 } from "@/data/types";
 import type {
   WordPressAdapter,
@@ -64,7 +68,9 @@ function assertAllowedUrl(url: string, siteUrl: string): void {
     /^\/wp-json\/wp\/v2\/users\/me/.test(relative) ||
     /^\/wp-json\/wp\/v2\/pages(\/\d+)?(\/revisions(\/\d+)?)?(\?.*)?$/.test(relative) ||
     /^\/wp-json\/wp\/v2\/media\/\d+(\?.*)?$/.test(relative) ||
-    /^\/wp-json\/wp\/v2\/settings(\?.*)?$/.test(relative);
+    /^\/wp-json\/wp\/v2\/settings(\?.*)?$/.test(relative) ||
+    /^\/wp-json\/ctos\/v1\/elementor\/\d+$/.test(relative) ||           // CT Bridge: targeted patch + GET
+    /^\/wp-json\/ctos\/v1\/elementor\/\d+\/rollback$/.test(relative); // CT Bridge: controlled rollback
   if (!allowed) {
     throw new Error(`WP REST: request to disallowed endpoint: ${relative}`);
   }
@@ -144,6 +150,105 @@ interface WpRestRoot {
   authentication?: Record<string, unknown>;
   routes?: Record<string, unknown>;
   generator?: string;   // "WordPress X.Y.Z"
+}
+
+// ---------------------------------------------------------------------------
+// CT Bridge response shapes (ctos/v1 namespace)
+// ---------------------------------------------------------------------------
+
+interface CtBridgeDocumentResponse {
+  page_id: number;
+  elementor_managed: boolean;
+  elementor_edit_mode: string | null;
+  document_hash: string;
+  elementor_data: unknown[];
+}
+
+interface CtBridgePatchResponse {
+  page_id: number;
+  previous_hash: string;
+  document_hash: string;
+}
+
+interface CtBridgeRollbackResponse {
+  page_id: number;
+  previous_hash: string;
+  document_hash: string;
+  snapshot_hash: string;
+}
+
+// Raw Elementor node as stored in _elementor_data
+interface RawElementorNode {
+  id: string;
+  elType: string;
+  widgetType?: string;
+  settings: Record<string, unknown>;
+  elements?: RawElementorNode[];
+  [key: string]: unknown;  // all other Elementor fields preserved
+}
+
+// Safe Elementor style setting keys (must match wp-permissions.ts SAFE_STYLE_KEYS)
+const BRIDGE_SAFE_STYLE_KEYS = new Set([
+  "text_align", "color", "background_color", "margin", "padding",
+  "border_radius", "typography_font_size", "typography_font_weight",
+  "width", "height", "responsive_visibility", "flex_justify_content", "flex_align_items",
+]);
+
+// ---------------------------------------------------------------------------
+// Elementor node type inference — Raw ↔ Typed conversion
+// ---------------------------------------------------------------------------
+
+function inferNodeType(elType: string, widgetType?: string): ElementorNodeType {
+  if (elType === "widget") {
+    switch (widgetType) {
+      case "heading":     return "heading";
+      case "text-editor": return "text";
+      case "button":      return "button";
+      case "image":       return "image";
+      default:            return "unknown";
+    }
+  }
+  if (elType === "container" || elType === "section" || elType === "column" || elType === "inner-section") {
+    return "container";
+  }
+  return "unknown";
+}
+
+/** Extract only the typed settings we manage — everything else lives in _preserved.settings */
+function extractTypedSettings(type: ElementorNodeType, raw: Record<string, unknown>): Record<string, unknown> {
+  switch (type) {
+    case "heading":
+      return { title: raw["title"] ?? "" };
+    case "text":
+      return { editor: raw["editor"] ?? "" };
+    case "button":
+      return { button_text: raw["button_text"] ?? "", button_url: raw["button_url"] ?? {} };
+    case "image":
+      return { image: raw["image"] ?? {} };
+    case "container": {
+      const safe: Record<string, unknown> = {};
+      for (const key of BRIDGE_SAFE_STYLE_KEYS) {
+        if (key in raw) safe[key] = raw[key];
+      }
+      return safe;
+    }
+    default:
+      return {};
+  }
+}
+
+/** Convert one raw Elementor node to a typed ElementorNode, preserving all unknown fields. */
+function rawToElementorNode(raw: RawElementorNode): ElementorNode {
+  const type   = inferNodeType(raw.elType, raw.widgetType);
+  const typed  = extractTypedSettings(type, raw.settings ?? {});
+  const kids   = (raw.elements ?? []).map((c) => rawToElementorNode(c as RawElementorNode));
+
+  // _preserved holds the full raw node (minus elements which become children) for round-trip safety.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { elements: _el, ...restRaw } = raw as Record<string, unknown>;
+  const preserved: Record<string, unknown> = { ...restRaw };
+
+  return { id: raw.id, type, settings: typed, children: kids, _preserved: preserved };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,15 +431,29 @@ export class RealWordPressRestAdapter implements WordPressAdapter {
   }
 
   // -------------------------------------------------------------------------
-  // READ — getElementorDocument (not supported via core REST)
+  // READ — getElementorDocument via CT Bridge
   // -------------------------------------------------------------------------
 
-  async getElementorDocument(_pageId: string): Promise<ElementorDocument | null> {
-    // Elementor stores its data in wp_postmeta (_elementor_data).
-    // Standard WordPress REST does not expose arbitrary postmeta safely.
-    // A CT Bridge endpoint is required for real Elementor document reads.
-    // Returning null signals "not available" — caller must handle gracefully.
-    return null;
+  async getElementorDocument(pageId: string): Promise<ElementorDocument | null> {
+    // Requires the CT Bridge plugin to be installed and active on the WordPress site.
+    // Bridge endpoint: GET /wp-json/ctos/v1/elementor/{pageId}
+    // Returns null when: page not found (404), page not Elementor-managed (422).
+    try {
+      const res = await this.get<CtBridgeDocumentResponse>(`/wp-json/ctos/v1/elementor/${pageId}`);
+      if (!res.elementor_managed || !Array.isArray(res.elementor_data)) return null;
+      return {
+        pageId,
+        version: "bridge",
+        documentHash: res.document_hash,
+        nodes: res.elementor_data.map((n) => rawToElementorNode(n as RawElementorNode)),
+      };
+    } catch (err) {
+      // Page not found or not Elementor-managed — both signal "not available"
+      if (err instanceof Error && (err.message.includes("HTTP 404") || err.message.includes("HTTP 422"))) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -459,15 +578,112 @@ export class RealWordPressRestAdapter implements WordPressAdapter {
   }
 
   // -------------------------------------------------------------------------
-  // WRITE — updateElementorDocument (not supported via core REST)
+  // READ — getElementorSnapshot (raw nodes for pre-write archival)
   // -------------------------------------------------------------------------
 
-  async updateElementorDocument(_pageId: string, _doc: ElementorDocument): Promise<WpWritePrimitive> {
+  async getElementorSnapshot(pageId: string): Promise<{ documentHash: string; rawNodes: unknown[] } | null> {
+    // Returns the raw bridge GET response without converting to typed nodes.
+    // The raw nodes are stored in WebsiteRevisionSnapshot.elementorSnapshotRaw so that
+    // rollback can send them back byte-for-byte, preserving the PHP-computed hash.
+    try {
+      const res = await this.get<CtBridgeDocumentResponse>(`/wp-json/ctos/v1/elementor/${pageId}`);
+      if (!res.elementor_managed || !Array.isArray(res.elementor_data)) return null;
+      return { documentHash: res.document_hash, rawNodes: res.elementor_data };
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes("HTTP 404") || err.message.includes("HTTP 422"))) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // WRITE — updateElementorDocument (structural ops — not via targeted patch)
+  // -------------------------------------------------------------------------
+
+  async updateElementorDocument(pageId: string, _doc: ElementorDocument): Promise<WpWritePrimitive> {
+    // Structural Elementor writes (ADD_APPROVED_SECTION, REMOVE_DRAFT_SECTION,
+    // REORDER_DRAFT_SECTIONS) are not supported via the CT Bridge targeted patch
+    // endpoint. The bridge only accepts targeted single-element mutations.
+    // These operations must be routed through the engine's fallback path or deferred.
     throw new Error(
-      "updateElementorDocument is not supported by the REST adapter. " +
-      "Elementor document writes require a CT Bridge endpoint. " +
-      "Use updatePageContent for standard WordPress content edits.",
+      `updateElementorDocument: structural Elementor writes are not supported via the CT Bridge. ` +
+      `Use applyElementorPatch for SET_WIDGET_TEXT, SET_WIDGET_LINK, SET_IMAGE, or SET_SETTING.` +
+      ` Page: ${pageId}`,
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // WRITE — applyElementorPatch (targeted single-element mutation via CT Bridge)
+  // -------------------------------------------------------------------------
+
+  async applyElementorPatch(pageId: string, patch: ElementorBridgePatch): Promise<WpWritePrimitive> {
+    // Bridge endpoint: PATCH /wp-json/ctos/v1/elementor/{pageId}
+    // Sends a targeted patch descriptor — NOT the full document.
+    // The PHP bridge locates the element, validates the operation and value,
+    // mutates only that one setting, and returns the new document hash.
+    const res = await this.patch<CtBridgePatchResponse>(
+      `/wp-json/ctos/v1/elementor/${pageId}`,
+      {
+        expected_document_hash: patch.expectedDocumentHash,
+        patch: {
+          operation:              patch.operation,
+          element_id:             patch.elementId,
+          expected_element_type:  patch.expectedElementType,
+          ...(patch.expectedCurrentValue !== undefined ? { expected_current_value: patch.expectedCurrentValue } : {}),
+          ...(patch.key !== undefined ? { key: patch.key } : {}),
+          value:                  patch.value,
+        },
+      },
+    );
+
+    // Read-back verification: re-fetch and confirm the new hash.
+    const readBack = await this.getElementorDocument(pageId);
+    if (readBack === null || readBack.documentHash !== res.document_hash) {
+      throw new Error(
+        `applyElementorPatch: read-back hash mismatch after write to page ${pageId}. ` +
+        `Expected ${res.document_hash}, got ${readBack?.documentHash ?? "null"}.`,
+      );
+    }
+
+    return {
+      resultToken: `bridge_patch_${pageId}_${res.document_hash.slice(0, 8)}`,
+      afterStateHash: res.document_hash,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // WRITE — rollbackElementorDocument via CT Bridge rollback endpoint
+  // -------------------------------------------------------------------------
+
+  async rollbackElementorDocument(pageId: string, params: ElementorBridgeRollback): Promise<WpWritePrimitive> {
+    // Bridge endpoint: POST /wp-json/ctos/v1/elementor/{pageId}/rollback
+    // The bridge verifies:
+    //   1. expected_document_hash matches current live document (conflict protection)
+    //   2. hash(elementor_data) === snapshot_hash (snapshot integrity)
+    // Only if both pass does it restore the snapshot.
+    const res = await this.post<CtBridgeRollbackResponse>(
+      `/wp-json/ctos/v1/elementor/${pageId}/rollback`,
+      {
+        snapshot_hash:           params.snapshotHash,
+        expected_document_hash:  params.expectedCurrentHash,
+        elementor_data:          params.elementorData,
+      },
+    );
+
+    // Read-back verification: confirm restored hash matches rollback response.
+    const readBack = await this.getElementorDocument(pageId);
+    if (readBack === null || readBack.documentHash !== res.document_hash) {
+      throw new Error(
+        `rollbackElementorDocument: read-back hash mismatch after rollback of page ${pageId}. ` +
+        `Expected ${res.document_hash}, got ${readBack?.documentHash ?? "null"}.`,
+      );
+    }
+
+    return {
+      resultToken: `bridge_rollback_${pageId}_${res.document_hash.slice(0, 8)}`,
+      afterStateHash: res.document_hash,
+    };
   }
 
   // -------------------------------------------------------------------------
