@@ -62,7 +62,7 @@ describe("OpenAI adapter (live path, fake transport)", () => {
     const body = JSON.parse(call.init.body) as { model: string; messages: { role: string; content: string }[]; response_format: { type: string; json_schema: { name: string; schema: { properties: Record<string, unknown> } } } };
     expect(body.model).toBe("gpt-4o-mini");
     expect(body.messages[0].role).toBe("system");
-    expect(body.messages[0].content).toContain("08 Intelligence Curator");
+    expect(body.messages[0].content).toContain("08 Curator");
     expect(body.messages[0].content).toContain("DOCTRINE (permanent Creative Touch rules)");
     expect(body.messages[1].content).toContain("INPUT ARTIFACTS");
     expect(body.response_format.type).toBe("json_schema");

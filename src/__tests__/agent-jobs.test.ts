@@ -98,7 +98,7 @@ describe("agent job lifecycle", () => {
     expect(all.some((k) => k.id.startsWith("kn_up_"))).toBe(false);
     expect(req.systemContext).toContain("DOCTRINE (permanent Creative Touch rules)");
     expect(req.systemContext).toContain("PROJECT FACTS (this client/project only): none");
-    expect(req.systemContext).toContain("WordPress / Elementor Builder");
+    expect(req.systemContext).toContain("05 Builder");
     expect(req.permissionLevel).toBe("AMBER");
   });
 });

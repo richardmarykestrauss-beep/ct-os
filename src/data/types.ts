@@ -47,9 +47,11 @@ export type ProjectState =
   | "STRATEGY"
   | "DESIGN"
   | "CONTENT"
+  | "DESIGN_AND_CONTENT"
   | "READY_TO_BUILD"
   | "BUILDING"
   | "QA"
+  | "CLIENT_REVIEW"
   | "READY_TO_LAUNCH"
   | "LIVE"
   | "MAINTENANCE"
@@ -257,6 +259,8 @@ export type ArtifactType =
   | "site_blueprint"
   | "design_system"
   | "content_pack"
+  | "build_pack"
+  | "job_pack"
   | "build_plan"
   | "build_report"
   | "qa_report"
@@ -428,18 +432,22 @@ export interface ActivityEvent {
 // Agent jobs, runs and handoffs
 // ---------------------------------------------------------------------------
 
-export type AgentJobStatus = "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type AgentJobStatus = "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "NEEDS_A_HAND" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 export type AgentTaskType =
   | "research"
   | "ux_architecture"
   | "creative_direction"
+  | "design_direction"
+  | "composition"
+  | "visual_review"
   | "seo_content"
   | "build"
   | "qa_audit"
   | "deployment"
   | "curate_lessons"
-  | "orchestrate";
+  | "orchestrate"
+  | "intake";
 
 /** The standard contract for asking an agent to do one unit of work. */
 export interface AgentJob {
@@ -465,6 +473,14 @@ export interface AgentJob {
   handoffId: string | null;
   /** Who asked for the job to run (auth user id). */
   requestedById: string | null;
+  /**
+   * Execution mode used for this job (CTOS-005A Part 6).
+   * A = direct API, B = assisted/external subscription, C = manual human completion.
+   * Optional for backward compatibility with pre-005A jobs (treat absent as "A").
+   */
+  executionMode?: ExecutionMode;
+  /** Set when a Mode B export exists for this job (CTOS-005A Part 9). */
+  modeBJobId?: string | null;
   error?: string;
   createdAt: ISODate | null;
   updatedAt: ISODate | null;
@@ -827,6 +843,449 @@ export interface ExternalAccessLogEntry {
   createdIds?: string[];
 }
 // ---------------------------------------------------------------------------
+// CTOS-005A: Workflow v1 + Resilient Execution + Benchmark Hardening
+// All additions are backward-compatible. Old records simply lack the new optional fields.
+// ---------------------------------------------------------------------------
+
+/** Workflow stages 0–7 per Workflow V1 (Part 3). Informational — state machine is the authority. */
+export type WorkflowStage = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/**
+ * Execution mode for a job (Part 6).
+ * A = direct API execution, B = assisted/external subscription, C = manual human completion.
+ */
+export type ExecutionMode = "A" | "B" | "C";
+
+/** Transport used when execution mode is B or C (Part 7). */
+export type JobPackTransport =
+  | "API"
+  | "CLAUDE_SUBSCRIPTION"
+  | "CHATGPT_SUBSCRIPTION"
+  | "GEMINI"
+  | "HERMES"
+  | "HUMAN"
+  | "LOCAL_MODEL";
+
+/**
+ * Agent 03 Creative Director operating passes (Part 20).
+ * DIRECTION: brand/direction analysis pass.
+ * COMPOSITION: page composition design pass.
+ * VISUAL_REVIEW: screenshot-based visual validation pass (requires real screenshots).
+ */
+export type AgentPass = "DIRECTION" | "COMPOSITION" | "VISUAL_REVIEW";
+
+/**
+ * Typed QA severity taxonomy (Part 18). Named aliases for the existing P0–P3 codes.
+ * The existing QASeverity ("P0"–"P3") is kept for backward compatibility.
+ */
+export type QASeverityLevel = "CRITICAL" | "MAJOR" | "MINOR" | "COSMETIC";
+/** Maps P-codes to the named severity levels for UI and test assertions. */
+export const QA_SEVERITY_LEVEL: Record<QASeverity, QASeverityLevel> = {
+  P0: "CRITICAL",
+  P1: "MAJOR",
+  P2: "MINOR",
+  P3: "COSMETIC",
+} as const;
+
+/** Binary visual verification state for the central assessVisualVerification validator (Part 21). */
+export type VisualVerificationState = "VISUAL_NOT_VERIFIED" | "VISUAL_VERIFIED";
+
+/** QA operating modes supported by Agent 06 (Part 17). */
+export type QAMode =
+  | "TECHNICAL"
+  | "VISUAL"
+  | "RESPONSIVE"
+  | "JOURNEY"
+  | "CONTENT"
+  | "SEO"
+  | "LAUNCH_READINESS";
+
+/**
+ * Visual verification status for any artifact making visual claims (Part 19).
+ * VISUAL_NOT_VERIFIED is the default when screenshots are absent.
+ */
+export type VisualVerificationStatus =
+  | "VISUAL_NOT_VERIFIED"
+  | "VERIFIED"
+  | "SCREENSHOT_REQUIRED"
+  | "NOT_APPLICABLE";
+
+/** Screenshot capture metadata — required for any VISUAL_REVIEW job (Part 20). */
+export interface ScreenshotEvidence {
+  id: string;
+  projectId: string;
+  jobId: string | null;
+  url: string;
+  /** Viewport profile at capture time. */
+  viewport: "desktop" | "mobile" | "tablet";
+  widthPx: number;
+  heightPx: number;
+  capturedAt: ISODate | null;
+  captureStatus: "captured" | "failed" | "pending";
+  /** Browser console errors recorded during capture. */
+  consoleErrors: string[];
+  /** Page load errors (network, render). */
+  loadErrors: string[];
+}
+
+/** Edit-protection metadata per page/template (Part 22). Stored alongside build artifacts. */
+export interface HumanEditMetadata {
+  /** Job that last wrote this page. */
+  lastBuiltByJobId: string | null;
+  /** Artifact version of the build pack used. */
+  artifactVersion: number | null;
+  /** SHA-256 of the canonical content at last-build time. */
+  contentHash: string | null;
+  /** True when content has changed since the last CT-OS build (detected externally). */
+  humanEditDetected: boolean;
+  lastCheckedAt: ISODate | null;
+}
+
+/**
+ * Documented context budget for a job (Part 8).
+ * Replaces magic truncation constants; every reduction is auditable.
+ */
+export interface ContextBudgetPlan {
+  /** Provider maximum context window in tokens (approximate). */
+  providerLimitTokens: number;
+  /** Tokens reserved for the model's output. */
+  reservedOutputTokens: number;
+  systemBudgetTokens: number;
+  skillBudgetTokens: number;
+  projectBriefBudgetTokens: number;
+  inputArtifactBudgetTokens: number;
+  evidenceBudgetTokens: number;
+  totalAllocatedTokens: number;
+  remainingTokens: number;
+}
+
+/** Records one artifact content reduction so provenance is never lost (Part 8). */
+export interface ContextReductionRecord {
+  artifactId: string;
+  originalChars: number;
+  reducedChars: number;
+  method: "field_selection" | "task_excerpt" | "summary_artifact" | "truncated";
+  summarized: boolean;
+  /** Source artifact ID is always preserved even when content is reduced. */
+  sourceArtifactIdPreserved: true;
+}
+
+/**
+ * Provider circuit state — supplements HealthTracker with a typed vocabulary (Part 11).
+ * Mapped from HTTP status codes and error categories by the circuit breaker service.
+ */
+export type ProviderCircuitState =
+  | "healthy"
+  | "degraded"
+  | "quota_exceeded"
+  | "rate_limited"
+  | "unavailable"
+  | "not_configured";
+
+/** Token and retry telemetry for a completed job — enables future cost visibility (Part 26). */
+export interface RetryTelemetry {
+  successInputTokens: number | null;
+  successOutputTokens: number | null;
+  /** Tokens consumed by attempts that failed (provider reports them). */
+  failedAttemptInputTokens: number | null;
+  failedAttemptOutputTokens: number | null;
+  retryCount: number;
+  /** Provider error class that triggered the retry (e.g. "validation", "provider_unavailable"). */
+  providerErrorClass: string | null;
+  fallbackAttempts: number;
+  finalExecutionMode: ExecutionMode;
+}
+
+// ---------------------------------------------------------------------------
+// Build pack (Part 5) — the single authoritative build contract for Agent 05
+// ---------------------------------------------------------------------------
+
+export type BuildPackStatus = "ASSEMBLING" | "READY" | "CONFLICT" | "SUPERSEDED";
+
+export interface BuildPackConflict {
+  kind:
+    | "section_missing_from_blueprint"
+    | "content_field_unresolvable"
+    | "cross_project_artifact"
+    | "design_contradicts_constraint"
+    | "section_dependency_unavailable"
+    | "missing_required_content";
+  detail: string;
+  /** Artifact IDs involved in the conflict. */
+  artifactIds: string[];
+}
+
+export interface BuildPackPage {
+  path: string;
+  title: string;
+  templateType: string;
+  sectionRequirements: string[];
+  /** Maps section keys to approved content field values. */
+  contentMappings: Record<string, string>;
+  responsiveRequirements: string[];
+  seoMeta: { title: string; metaDescription: string; h1: string };
+  assetRefs: string[];
+}
+
+/**
+ * The single authoritative build contract produced by the build-pack assembler (Part 5).
+ * Agent 05 (Builder) receives ONLY the approved build pack — never raw upstream artifacts.
+ * Assembly fails closed on conflicts; Agent 05 never decides which conflicting artifact wins.
+ */
+export interface BuildPack {
+  id: string;
+  projectId: string;
+  version: number;
+  status: BuildPackStatus;
+  siteBlueprintArtifactId: string | null;
+  designSystemArtifactId: string | null;
+  contentPackArtifactId: string | null;
+  pages: BuildPackPage[];
+  constraints: string[];
+  permissions: PermissionLevel[];
+  acceptanceCriteria: string[];
+  evidenceRequirements: string[];
+  /** Non-empty when status is CONFLICT — human attention required before proceeding. */
+  conflicts: BuildPackConflict[];
+  assembledByJobId: string | null;
+  assembledAt: ISODate | null;
+  supersededById: string | null;
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Job pack (Part 7) — first-class renderable execution contract
+// ---------------------------------------------------------------------------
+
+/** One input artifact reference in a job pack (content excluded; only metadata travels). */
+export interface JobPackArtifact {
+  id: string;
+  type: ArtifactType;
+  version: number;
+  title: string;
+  summary: string | null;
+  /** Char count of the full content, so recipients know what they are missing. */
+  originalContentChars: number | null;
+}
+
+export interface JobPackLesson {
+  id: string;
+  title: string;
+  content: string;
+  scope: KnowledgeScope;
+}
+
+/**
+ * A first-class renderable job pack (Part 7).
+ * Can be transported through API, Claude subscription, ChatGPT, Gemini, Hermes, or human.
+ * MUST NEVER contain secrets — enforced by secretScanStatus before export.
+ */
+export interface JobPack {
+  id: string;
+  jobId: string;
+  projectId: string;
+  ticketId: string | null;
+  agentId: string;
+  agentCode: AgentCode;
+  /** What this agent is and what it exists to do. */
+  agentCharter: string;
+  /** Things this agent explicitly must not do beyond the permission model. */
+  neverOwns: string[];
+  /** Specific operating pass for Agent 03 (DIRECTION/COMPOSITION/VISUAL_REVIEW), or null for other agents. */
+  operatingPass: AgentPass | null;
+  skillId: string | null;
+  skillVersion: number | null;
+  /** Short human-readable project context card. Never the full knowledge dump. */
+  projectBriefCard: string;
+  inputArtifacts: JobPackArtifact[];
+  approvedLessons: JobPackLesson[];
+  constraints: string[];
+  permissions: PermissionLevel[];
+  task: string;
+  outputSchema: string;
+  validationRequirements: string[];
+  evidenceExpectations: string[];
+  /** Result of secret-pattern scanning before export. Must be "clean" to export. */
+  secretScanStatus: "clean" | "flagged";
+  secretScanIssues: string[];
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Mode B — Assisted / External Subscription execution (Part 9)
+// ---------------------------------------------------------------------------
+
+export type ModeBStatus =
+  | "PENDING_EXPORT"
+  | "EXPORTED"
+  | "PENDING_RESULT"
+  | "RESULT_IMPORTED"
+  | "RESULT_REJECTED"
+  | "CANCELLED";
+
+/**
+ * Tracks the lifecycle of a Mode B job — when autonomous API execution failed or was bypassed
+ * and the operator is manually running the job pack through an external assistant (Part 9).
+ */
+export interface ModeBJob {
+  id: string;
+  jobId: string;
+  projectId: string;
+  status: ModeBStatus;
+  transport: Exclude<JobPackTransport, "API">;
+  /** SHA-256 of the exported job pack, for integrity verification on import. */
+  jobPackHash: string | null;
+  jobPackId: string | null;
+  exportedAt: ISODate | null;
+  resultImportedAt: ISODate | null;
+  resultRejectedReason: string | null;
+  /** Operator who exported and imported. */
+  operatorId: string | null;
+  operatorName: string | null;
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Provenance — full execution provenance on every run/artifact (Part 25)
+// ---------------------------------------------------------------------------
+
+export interface ProvenanceRecord {
+  projectId: string;
+  jobId: string;
+  agentId: string;
+  agentCode: AgentCode;
+  provider: ProviderId | null;
+  model: string | null;
+  executionMode: ExecutionMode;
+  transport: JobPackTransport;
+  skillId: string | null;
+  skillVersion: number | null;
+  inputArtifactIds: string[];
+  /** Evidence items (QA items, screenshots) referenced by the output artifact. */
+  evidenceIds: string[];
+  screenshotIds: string[];
+  validationResult: ValidationResult | null;
+  attemptCount: number;
+  failedAttempts: number;
+  fallbackReason: string | null;
+  /** Operator who performed manual transport (Mode B/C). */
+  operatorId: string | null;
+  contextReductions: ContextReductionRecord[];
+  retryTelemetry: RetryTelemetry | null;
+  timestamp: ISODate;
+}
+
+// ---------------------------------------------------------------------------
+// Client workflow primitives (Part 15)
+// ---------------------------------------------------------------------------
+
+export type IntakeStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE" | "BLOCKED";
+
+export type ClientAssetStatus = "REQUESTED" | "RECEIVED" | "APPROVED" | "REJECTED";
+
+export interface ClientAsset {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  status: ClientAssetStatus;
+  /** Non-secret file reference (storage path or URL). */
+  fileRef: string | null;
+  requestedAt: ISODate | null;
+  receivedAt: ISODate | null;
+  approvedAt: ISODate | null;
+  notes: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Revision control (Part 16)
+// ---------------------------------------------------------------------------
+
+export type ChangeRequestClassification = "IN_SCOPE" | "OUT_OF_SCOPE" | "NEEDS_DECISION";
+
+/** A structured change request produced from client feedback (Part 15/16). */
+export interface ChangeRequest {
+  id: string;
+  projectId: string;
+  revisionRoundId: string | null;
+  title: string;
+  description: string;
+  classification: ChangeRequestClassification;
+  /** Conductor may recommend classification; Production Lead confirms (Part 2). */
+  recommendedByAgentId: string | null;
+  classifiedByLeadId: string | null;
+  classifiedByLeadName: string | null;
+  confirmedAt: ISODate | null;
+  ticketIds: string[];
+  createdAt: ISODate | null;
+}
+
+/**
+ * Tracks revision rounds for a project (Part 16).
+ * Default commercial policy: 2 included rounds — overridable per project.
+ * A third round creates an attention item requiring Production Lead decision.
+ * CT-OS does not automatically refuse further work.
+ */
+export interface RevisionRound {
+  id: string;
+  projectId: string;
+  roundNumber: number;
+  requestSource: "client" | "internal" | "qa";
+  ticketIds: string[];
+  changeRequestIds: string[];
+  scopeClassification: ChangeRequestClassification | null;
+  approvedByLeadId: string | null;
+  approvedByLeadName: string | null;
+  approvedAt: ISODate | null;
+  completedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Curation — Agent 08 event-triggered/scheduled (Part 24)
+// ---------------------------------------------------------------------------
+
+export type CurationDestinationType =
+  | "skill"
+  | "checklist"
+  | "rubric"
+  | "section_library"
+  | "runbook";
+
+export interface CurationDestinationProposal {
+  type: CurationDestinationType;
+  /** Existing skill/item id to update, or null for a new entry. */
+  targetId: string | null;
+  reason: string;
+}
+
+/**
+ * A candidate lesson identified by Agent 08 (Part 24).
+ * Must include evidence references — never promoted automatically.
+ * Humans remain authoritative on all knowledge promotion.
+ */
+export interface CurationCandidate {
+  id: string;
+  /** null = agency-wide observation, not project-specific. */
+  projectId: string | null;
+  agentId: string;
+  title: string;
+  content: string;
+  /** Ticket codes, artifact IDs, QA item IDs, benchmark run references. */
+  evidenceRefs: string[];
+  proposedScope: Exclude<KnowledgeScope, "TASK">;
+  /** Number of projects this pattern was observed in. */
+  observedProjectCount: number;
+  confidence: number;
+  destinationProposal: CurationDestinationProposal;
+  status: "PENDING" | "PROMOTED" | "REJECTED" | "DEFERRED";
+  reviewedById: string | null;
+  reviewedByName: string | null;
+  reviewedAt: ISODate | null;
+  createdAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------------------
 // Aggregate store shape (what a repository returns)
 // ---------------------------------------------------------------------------
 
@@ -856,4 +1315,12 @@ export interface OSData {
   skills: Skill[];
   externalClients: ExternalClient[];
   externalAccessLog: ExternalAccessLogEntry[];
+  // CTOS-005A additions (default to [] in all existing seeds/migrations)
+  buildPacks: BuildPack[];
+  revisionRounds: RevisionRound[];
+  changeRequests: ChangeRequest[];
+  clientAssets: ClientAsset[];
+  curationCandidates: CurationCandidate[];
+  screenshotEvidence: ScreenshotEvidence[];
+  modeBJobs: ModeBJob[];
 }

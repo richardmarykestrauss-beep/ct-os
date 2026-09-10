@@ -62,7 +62,7 @@ describe("Gemini adapter (live path, fake transport)", () => {
     expect(call.url).not.toContain(SECRET); // the key must never ride in the URL
     expect(call.init.headers["x-goog-api-key"]).toBe(SECRET);
     const body = JSON.parse(call.init.body) as { systemInstruction: { parts: { text: string }[] }; contents: { parts: { text: string }[] }[]; generationConfig: { responseMimeType: string } };
-    expect(body.systemInstruction.parts[0].text).toContain("08 Intelligence Curator");
+    expect(body.systemInstruction.parts[0].text).toContain("08 Curator");
     expect(body.systemInstruction.parts[0].text).toContain("DOCTRINE (permanent Creative Touch rules)");
     expect(body.contents[0].parts[0].text).toContain("INPUT ARTIFACTS");
     expect(body.generationConfig.responseMimeType).toBe("application/json");

@@ -6,7 +6,7 @@
  * artifacts and handoffs. Functions are pure (OSData in → OSData out) except `executeJob`,
  * which awaits the router and then applies a pure result step.
  */
-import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, Artifact, ArtifactType, ExecutionLog, ExecutionPriority, Handoff, JobApproval, KnowledgeItem, OSData, Ticket } from "@/data/types";
+import type { Agent, AgentJob, AgentJobStatus, AgentRun, AgentTaskType, Artifact, ArtifactType, ExecutionLog, ExecutionMode, ExecutionPriority, Handoff, JobApproval, KnowledgeItem, OSData, Ticket } from "@/data/types";
 import type { ModelRouter } from "@/ai/router";
 import type { ApprovedKnowledge, ExecutionRequest, ProviderRequest, RouterAttempt, RouterResult } from "@/ai/types";
 import { NoProviderAvailableError } from "@/ai/types";
@@ -23,9 +23,12 @@ import { newId, nowIso } from "@/lib/core";
 // ---------------------------------------------------------------------------
 
 export const JOB_TRANSITIONS: Record<AgentJobStatus, AgentJobStatus[]> = {
-  QUEUED: ["RUNNING", "CANCELLED"],
-  RUNNING: ["WAITING_APPROVAL", "COMPLETED", "FAILED", "CANCELLED"],
+  QUEUED: ["RUNNING", "NEEDS_A_HAND", "CANCELLED"],
+  RUNNING: ["WAITING_APPROVAL", "NEEDS_A_HAND", "COMPLETED", "FAILED", "CANCELLED"],
   WAITING_APPROVAL: ["COMPLETED", "QUEUED", "FAILED", "CANCELLED"],
+  // NEEDS_A_HAND: operator can export to Mode B, mark done manually (Mode C), re-queue (Mode A retry), or approve
+  // WAITING_APPROVAL added so Mode B/C can commit a result without pretending the job ran through RUNNING.
+  NEEDS_A_HAND: ["QUEUED", "WAITING_APPROVAL", "COMPLETED", "CANCELLED"],
   COMPLETED: [],
   FAILED: ["QUEUED"],
   CANCELLED: [],
@@ -35,6 +38,7 @@ export const JOB_STATUS_LABELS: Record<AgentJobStatus, string> = {
   QUEUED: "Queued",
   RUNNING: "Running",
   WAITING_APPROVAL: "Waiting approval",
+  NEEDS_A_HAND: "Needs a hand",
   COMPLETED: "Completed",
   FAILED: "Failed",
   CANCELLED: "Cancelled",
@@ -218,6 +222,13 @@ export function runsFromAttempts(job: AgentJob, attempts: RouterAttempt[], resul
 
 const MAX_CONTENT_CHARS = 12_000;
 
+/**
+ * After this many failed attempts, a job moves to NEEDS_A_HAND instead of FAILED (Part 10/11).
+ * The operator can then export a Mode B pack or mark done manually.
+ * Jobs already in NEEDS_A_HAND must NOT automatically rerun when a provider recovers.
+ */
+export const MAX_AUTO_RETRY_ATTEMPTS = 3;
+
 function trimContent(content: unknown): unknown {
   if (content === undefined || content === null) return null;
   const json = JSON.stringify(content);
@@ -341,20 +352,32 @@ export function applyJobResult(data: OSData, jobId: string, result: RouterResult
   return { data: next, job: t.job, runs, artifactId: created.artifact.id };
 }
 
-export function applyJobFailure(data: OSData, jobId: string, error: NoProviderAvailableError | Error, opts: { runIdFor?: (i: number) => string } = {}): { data: OSData; job: AgentJob; runs: AgentRun[] } {
+export function applyJobFailure(
+  data: OSData,
+  jobId: string,
+  error: NoProviderAvailableError | Error,
+  opts: { runIdFor?: (i: number) => string } = {},
+): { data: OSData; job: AgentJob; runs: AgentRun[]; needsAHand: boolean } {
   const job = data.agentJobs.find((j) => j.id === jobId);
   if (!job) throw new Error(`Job ${jobId} not found`);
   const attempts = error instanceof NoProviderAvailableError ? error.attempts : [];
   const existingRuns = data.agentRuns.filter((r) => r.jobId === jobId).length;
   const runs = runsFromAttempts(job, attempts, null, existingRuns, opts.runIdFor);
   let next: OSData = { ...data, agentRuns: [...data.agentRuns, ...runs] };
-  const t = transitionJob(next, jobId, "FAILED", { error: error.message });
+
+  // After MAX_AUTO_RETRY_ATTEMPTS total attempts, move to NEEDS_A_HAND instead of FAILED.
+  // Jobs in NEEDS_A_HAND must NOT be automatically retried when a provider recovers (Part 11).
+  const totalAttempts = existingRuns + runs.length;
+  const needsAHand = totalAttempts >= MAX_AUTO_RETRY_ATTEMPTS;
+  const targetStatus = needsAHand ? "NEEDS_A_HAND" : "FAILED";
+
+  const t = transitionJob(next, jobId, targetStatus, { error: error.message });
   next = clearTaskKnowledge(t.data, jobId);
   if (t.job.handoffId) {
     const h = next.handoffs.find((x) => x.id === t.job.handoffId);
     if (h && h.status === "IN_PROGRESS") next = transitionHandoff(next, h.id, "REJECTED", { note: error.message }).data;
   }
-  return { data: next, job: t.job, runs };
+  return { data: next, job: t.job, runs, needsAHand };
 }
 
 /** Human approves a job's output: job COMPLETED, artifact FINAL, handoff COMPLETED, task context cleared. */
@@ -373,6 +396,54 @@ export function approveJobOutput(data: OSData, jobId: string): { data: OSData; j
 /** Human sends the output back: job re-queued, artifact stays DRAFT (a re-run produces the next version). */
 export function requestJobRevision(data: OSData, jobId: string, note?: string): { data: OSData; job: AgentJob } {
   return transitionJob(data, jobId, "QUEUED", { error: note });
+}
+
+/**
+ * Move a RUNNING job to NEEDS_A_HAND when autonomous execution cannot continue (Part 9).
+ * Exposes operator controls: COPY PACK / PASTE RESULT / MARK DONE MANUALLY.
+ * The job is NOT failed — it is suspended for human assistance.
+ */
+export function moveToNeedsAHand(data: OSData, jobId: string, reason: string): { data: OSData; job: AgentJob } {
+  return transitionJob(data, jobId, "NEEDS_A_HAND", { error: reason });
+}
+
+/**
+ * Mode C: an operator completed the artifact manually without a provider (Part 6/9).
+ * Creates the artifact, marks provenance as manual transport, completes the job.
+ * Does NOT pretend manual transport was an API call — executionMode is set to "C".
+ */
+export function markDoneManually(
+  data: OSData,
+  jobId: string,
+  output: unknown,
+  opts: { operatorId?: string | null; artifactTitle?: string; artifactId?: string } = {},
+): { data: OSData; job: AgentJob; artifactId: string } {
+  const job = data.agentJobs.find((j) => j.id === jobId);
+  if (!job) throw new Error(`Job ${jobId} not found`);
+  if (job.status !== "NEEDS_A_HAND" && job.status !== "QUEUED") {
+    throw new JobStateError(`Job ${jobId} is ${job.status}; can only mark done manually from NEEDS_A_HAND or QUEUED`);
+  }
+  // Do NOT go through RUNNING — Mode C is not an API execution.
+  // If QUEUED, transition directly to NEEDS_A_HAND first so the uniform manual path applies.
+  let workData = data;
+  if (job.status === "QUEUED") {
+    workData = transitionJob(data, jobId, "NEEDS_A_HAND", { error: "Manual completion requested before API execution" }).data;
+  }
+  const type = parseSchemaName(job.requiredOutputSchema).type;
+  const title = opts.artifactTitle ?? `${type.replace(/_/g, " ")} — manual`;
+  const previous = job.ticketId
+    ? workData.artifacts.find((a) => a.jobId && a.type === type && a.projectId === job.projectId && a.ticketId === job.ticketId && a.status !== "SUPERSEDED")
+    : null;
+  const created = previous
+    ? createArtifactVersion(workData, { previousArtifactId: previous.id, createdByAgentId: job.agentId, createdByProvider: null, jobId, ticketId: job.ticketId, content: output, id: opts.artifactId })
+    : createArtifact(workData, { projectId: job.projectId, type, title, createdByAgentId: job.agentId, createdByProvider: null, jobId, ticketId: job.ticketId, content: output, id: opts.artifactId });
+  let next = created.data;
+  const patchedJob: Partial<AgentJob> = { outputArtifactId: created.artifact.id, executionMode: "C" as ExecutionMode };
+  // NEEDS_A_HAND → WAITING_APPROVAL: valid transition (human must still approve the manual artifact).
+  const t = transitionJob(next, jobId, "WAITING_APPROVAL", patchedJob);
+  next = t.data;
+  next = setArtifactStatus(next, created.artifact.id, "DRAFT");
+  return { data: next, job: t.job, artifactId: created.artifact.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +483,8 @@ export interface ExecuteJobOutcome {
   job: AgentJob;
   runs: AgentRun[];
   artifactId: string | null;
+  /** True when all providers failed and the job was moved to NEEDS_A_HAND. Callers must create an attention item. */
+  needsAHand: boolean;
   error: Error | null;
 }
 
@@ -422,10 +495,10 @@ export async function executeJob(data: OSData, jobId: string, router: ModelRoute
   try {
     const result = await router.execute(request);
     const applied = applyJobResult(started.data, jobId, result, opts);
-    return { data: applied.data, job: applied.job, runs: applied.runs, artifactId: applied.artifactId, error: null };
+    return { data: applied.data, job: applied.job, runs: applied.runs, artifactId: applied.artifactId, needsAHand: false, error: null };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const failed = applyJobFailure(started.data, jobId, error);
-    return { data: failed.data, job: failed.job, runs: failed.runs, artifactId: null, error };
+    return { data: failed.data, job: failed.job, runs: failed.runs, artifactId: null, needsAHand: failed.needsAHand, error };
   }
 }

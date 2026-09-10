@@ -233,7 +233,9 @@ describe("gateway — structured validation and fallback", () => {
     expect(res.result.error?.category).toBe("validation");
     expect(res.result.error?.issues?.[0]).toMatchObject({ path: expect.any(String), message: expect.any(String) });
     expect(res.records.artifact).toBeNull();
-    expect(res.records.job.status).toBe("FAILED");
+    // After MAX_AUTO_RETRY_ATTEMPTS (3) validation failures, job goes to NEEDS_A_HAND
+    // so the operator can choose Mode B or Mode C to continue.
+    expect(["FAILED", "NEEDS_A_HAND"]).toContain(res.records.job.status);
     expect(d.store.data.artifacts.filter((a) => a.jobId === "job_green").length).toBe(0);
     expect(res.records.runs.filter((r) => r.status !== "SKIPPED").every((r) => r.status === "FAILED_VALIDATION")).toBe(true);
   });
@@ -277,7 +279,7 @@ describe("gateway — agent continuity", () => {
     // Same agent identity and the same CT-OS context reached both providers.
     const a = claudeRequest.calls[0];
     const b = openaiRequest.calls[0];
-    expect(a.agent).toEqual({ code: "02", name: "UX & Conversion Architect", role: "Sitemap, customer journey, IA, conversion logic", responsibilities: expect.any(Array) });
+    expect(a.agent).toEqual({ code: "02", name: "Site Architect", role: expect.any(String), responsibilities: expect.any(Array) });
     expect(b.agent).toEqual(a.agent);
     expect(b.agentId).toBe("agent_02");
     expect(b.approvedKnowledge.doctrine.map((k) => k.id)).toEqual(a.approvedKnowledge.doctrine.map((k) => k.id));

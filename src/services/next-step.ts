@@ -1,0 +1,169 @@
+/**
+ * Project Next Step resolver (CTOS-005A Part 7).
+ *
+ * Deterministic — the Conductor/LLM cannot invent workflow transitions.
+ * Always answers exactly one of:
+ *   - AGENT_ACTION: a specific agent should run next
+ *   - HUMAN_ACTION: a specific human must act
+ *   - BLOCKED: progress is blocked; detail explains why
+ *   - COMPLETE: project is in a terminal state
+ */
+import type { AgentCode, OSData, ProjectState } from "@/data/types";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type NextStepOutcome = "AGENT_ACTION" | "HUMAN_ACTION" | "BLOCKED" | "COMPLETE";
+
+export interface NextStep {
+  outcome: NextStepOutcome;
+  /** Which agent should act next (AGENT_ACTION only). */
+  agentCode: AgentCode | null;
+  /** Human-readable summary of what must happen. */
+  action: string;
+  /** Why progress is blocked or what the blocker is. */
+  blocker: string | null;
+  /** The project state this was computed for. */
+  forState: ProjectState;
+}
+
+// ---------------------------------------------------------------------------
+// Resolver
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the next step for a project.
+ * Checks live data (pending approvals, NEEDS_A_HAND jobs, open holds, etc.)
+ * before applying the state-machine default.
+ */
+export function resolveNextStep(data: OSData, projectId: string): NextStep {
+  const project = data.projects.find((p) => p.id === projectId);
+  if (!project) {
+    return blocked("PROJECT_NOT_FOUND", "Project not found", "DISCOVERY");
+  }
+
+  const state = project.state as ProjectState;
+
+  // Terminal states
+  if (state === "LIVE" || state === "ARCHIVED") {
+    return { outcome: "COMPLETE", agentCode: null, action: "Project is in a terminal state.", blocker: null, forState: state };
+  }
+
+  // Cross-cutting blockers checked before state-specific logic
+
+  // NEEDS_A_HAND jobs always block
+  const needsHandJobs = data.agentJobs.filter((j) => j.projectId === projectId && j.status === "NEEDS_A_HAND");
+  if (needsHandJobs.length > 0) {
+    const job = needsHandJobs[0]!;
+    return blocked(
+      `Job ${job.id} (${job.taskType}) is in NEEDS_A_HAND. Use Mode B (external assistant) or Mode C (manual completion) to continue.`,
+      `${needsHandJobs.length} job(s) require operator attention.`,
+      state,
+    );
+  }
+
+  // Open launch holds block
+  const openHolds = data.launchHolds.filter((h) => h.projectId === projectId && !h.resolved);
+  if (openHolds.length > 0) {
+    return human("Resolve all open launch holds before proceeding.", `${openHolds.length} open hold(s).`, state);
+  }
+
+  // Pending approvals block
+  const pendingApprovals = data.jobApprovals.filter((a) => a.projectId === projectId && a.status === "PENDING");
+  if (pendingApprovals.length > 0) {
+    return human(
+      `Approve ${pendingApprovals.length} pending artifact(s) to continue.`,
+      "Workflow paused at approval gate.",
+      state,
+    );
+  }
+
+  // Build-pack conflicts block READY_TO_BUILD
+  if (state === "READY_TO_BUILD" || state === "BUILDING") {
+    const conflictPack = data.buildPacks.find((bp) => bp.projectId === projectId && bp.status === "CONFLICT");
+    if (conflictPack) {
+      return blocked(
+        `Build pack ${conflictPack.id} has ${conflictPack.conflicts.length} conflict(s). Resolve them before Agent 05 can begin.`,
+        "Build pack conflict.",
+        state,
+      );
+    }
+  }
+
+  // State-specific next steps
+  return stateNextStep(data, projectId, state);
+}
+
+function stateNextStep(data: OSData, projectId: string, state: ProjectState): NextStep {
+  switch (state) {
+    case "NEW":
+    case "DISCOVERY":
+      return agent("A01", "Agent 01 (Discovery) should research the business and existing site.", state);
+
+    case "STRATEGY":
+      return agent("A02", "Agent 02 (UX & Conversion Architect) should produce the site blueprint.", state);
+
+    case "DESIGN":
+    case "DESIGN_AND_CONTENT": {
+      const hasBlueprint = data.artifacts.some((a) => a.projectId === projectId && a.type === "site_blueprint" && a.status === "FINAL");
+      if (!hasBlueprint) return blocked("No approved site blueprint. Agent 02 must complete the blueprint first.", "Missing site_blueprint.", state);
+      const hasDesign = data.artifacts.some((a) => a.projectId === projectId && a.type === "design_system" && a.status === "FINAL");
+      const hasContent = data.artifacts.some((a) => a.projectId === projectId && a.type === "content_pack" && a.status === "FINAL");
+      if (!hasDesign) return agent("A03", "Agent 03 (Creative Director) should produce the design system.", state);
+      if (!hasContent) return agent("A04", "Agent 04 (Content Architect) should produce the content pack.", state);
+      return human("Design system and content pack are both complete. Review and approve to advance to READY_TO_BUILD.", null, state);
+    }
+
+    case "CONTENT":
+      return agent("A04", "Agent 04 (Content Architect) should produce the content pack.", state);
+
+    case "READY_TO_BUILD": {
+      const readyPack = data.buildPacks.find((bp) => bp.projectId === projectId && bp.status === "READY");
+      if (!readyPack) return human("Assemble and approve the build pack before Agent 05 can begin.", "No READY build pack.", state);
+      return agent("A05", "Agent 05 (Builder) should build the site from the approved build pack.", state);
+    }
+
+    case "BUILDING":
+      return agent("A05", "Agent 05 (Builder) is building the site. Monitor for completion.", state);
+
+    case "QA": {
+      const hasQA = data.qaItems.some((q) => q.projectId === projectId);
+      if (!hasQA) return agent("A06", "Agent 06 (QA Auditor) should run the site audit.", state);
+      const criticals = data.qaItems.filter((q) => q.projectId === projectId && q.severity === "P0" && q.status !== "VERIFIED" && q.status !== "WONT_FIX");
+      if (criticals.length > 0) return blocked(`${criticals.length} CRITICAL QA defect(s) must be resolved before client review.`, "Open CRITICAL defects.", state);
+      const majors = data.qaItems.filter((q) => q.projectId === projectId && q.severity === "P1" && q.status !== "VERIFIED" && q.status !== "WONT_FIX");
+      if (majors.length > 0) return blocked(`${majors.length} MAJOR QA defect(s) must be resolved before client review.`, "Open MAJOR defects.", state);
+      return human("QA complete. Review results and advance to CLIENT_REVIEW.", null, state);
+    }
+
+    case "CLIENT_REVIEW": {
+      const unconfirmed = data.changeRequests.filter((cr) => cr.projectId === projectId && cr.confirmedAt === null);
+      if (unconfirmed.length > 0) return human(`Classify ${unconfirmed.length} unconfirmed change request(s) before proceeding.`, "Unclassified change requests.", state);
+      const openRound = data.revisionRounds.find((r) => r.projectId === projectId && r.completedAt === null);
+      if (openRound) return human("Complete the current revision round before advancing.", "Open revision round.", state);
+      return human("Client review complete. Approve to advance to READY_TO_LAUNCH.", null, state);
+    }
+
+    case "READY_TO_LAUNCH":
+      return human("Human operator must approve launch. Agent 07 will execute the deployment runbook.", "Launch requires human approval.", state);
+
+    case "MAINTENANCE":
+      return human("Site is live. Maintenance requests should create new jobs.", null, state);
+
+    default:
+      return blocked(`Unrecognised project state: ${state}`, "Unknown state.", state as ProjectState);
+  }
+}
+
+function agent(code: AgentCode, action: string, forState: ProjectState): NextStep {
+  return { outcome: "AGENT_ACTION", agentCode: code, action, blocker: null, forState };
+}
+
+function human(action: string, blocker: string | null, forState: ProjectState): NextStep {
+  return { outcome: "HUMAN_ACTION", agentCode: null, action, blocker, forState };
+}
+
+function blocked(detail: string, blocker: string, forState: ProjectState): NextStep {
+  return { outcome: "BLOCKED", agentCode: null, action: "Resolve the blocker before proceeding.", blocker: `${blocker} ${detail}`.trim(), forState };
+}

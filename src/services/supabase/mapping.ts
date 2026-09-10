@@ -32,7 +32,14 @@ export type TableName =
   | "execution_logs"
   | "skills"
   | "external_clients"
-  | "external_access_log";
+  | "external_access_log"
+  | "build_packs"
+  | "revision_rounds"
+  | "change_requests"
+  | "client_assets"
+  | "curation_candidates"
+  | "screenshot_evidence"
+  | "mode_b_jobs";
 
 export interface TableSpec {
   table: TableName;
@@ -70,6 +77,14 @@ export const TABLES: TableSpec[] = [
   { table: "skills", key: "skills", nullable: ["supersedesId", "approvedBy", "approvedById", "approvedAt", "createdAt", "updatedAt"] },
   { table: "external_clients", key: "externalClients", nullable: ["allowedTools", "tokenHash", "tokenPrefix", "createdById", "createdAt", "updatedAt", "lastUsedAt", "revokedAt"] },
   { table: "external_access_log", key: "externalAccessLog", nullable: ["at", "projectId", "ctosUserId", "permissionTier"] },
+  // CTOS-005A additions
+  { table: "build_packs", key: "buildPacks", nullable: ["assembledByJobId", "supersededById", "assembledAt", "createdAt"] },
+  { table: "revision_rounds", key: "revisionRounds", nullable: ["scopeClassification", "approvedByLeadId", "approvedByLeadName", "approvedAt", "completedAt", "createdAt"] },
+  { table: "change_requests", key: "changeRequests", nullable: ["recommendedByAgentId", "classifiedByLeadId", "classifiedByLeadName", "confirmedAt", "createdAt"] },
+  { table: "client_assets", key: "clientAssets", nullable: ["fileRef", "requestedAt", "receivedAt", "approvedAt", "notes"] },
+  { table: "curation_candidates", key: "curationCandidates", nullable: ["projectId", "reviewedById", "reviewedByName", "reviewedAt", "createdAt"] },
+  { table: "screenshot_evidence", key: "screenshotEvidence", nullable: [] },
+  { table: "mode_b_jobs", key: "modeBJobs", nullable: ["jobPackHash", "jobPackId", "exportedAt", "resultImportedAt", "resultRejectedReason", "operatorId", "operatorName", "createdAt"] },
 ];
 
 export function toSnake(key: string): string {

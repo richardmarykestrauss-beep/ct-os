@@ -12,7 +12,7 @@
 import type { AgentJob, AuthUser, ExecutionLog, ValidationResult } from "@/data/types";
 import { ModelRouter } from "@/ai/router";
 import { NoProviderAvailableError, type ExecutionResult, type RouterAttempt, type RouterResult } from "@/ai/types";
-import { buildExecutionRequest, toProviderRequest, transitionJob, runsFromAttempts, type GatewayRecords } from "@/services/agent-jobs";
+import { buildExecutionRequest, toProviderRequest, transitionJob, runsFromAttempts, MAX_AUTO_RETRY_ATTEMPTS, type GatewayRecords } from "@/services/agent-jobs";
 import { createArtifact, createArtifactVersion } from "@/services/artifacts";
 import { checkPermission, effectiveLevel, type PermissionCheck } from "@/services/job-approvals";
 import { skillProvenance } from "@/services/skills";
@@ -188,14 +188,18 @@ async function executeClaimed(input: ExecuteInput, deps: GatewayDeps, ctx: JobCo
     return { ok: true, result, records, permission, status: 200 };
   }
 
-  // Failure path: job FAILED, handoff REJECTED, every attempt logged.
+  // Failure path: after MAX_AUTO_RETRY_ATTEMPTS total attempts → NEEDS_A_HAND; else FAILED.
+  // Provider exhaustion must result in an explicit actionable state, not silent FAILED.
   const err = failure!;
-  const failedJob = transitionJob(snapshotWithJob(running), job.id, "FAILED", { error: err.message }).job;
+  const totalAttempts = attempts.length;
+  const targetStatus = totalAttempts >= MAX_AUTO_RETRY_ATTEMPTS ? "NEEDS_A_HAND" : "FAILED";
+  const failedJob = transitionJob(snapshotWithJob(running), job.id, targetStatus, { error: err.message }).job;
   const handoff = ctx.handoff && (ctx.handoff.status === "ACCEPTED" || ctx.handoff.status === "IN_PROGRESS") ? { ...ctx.handoff, status: "REJECTED" as const, note: err.message, updatedAt: now() } : null;
-  const records: GatewayRecords = { job: failedJob, runs, artifact: null, supersededArtifactId: null, handoff, approval: null, logs: logs.length ? logs : [baseLog(ctx, newId, startedAt, user, permission, { status: "FAILED", fallbackIndex: 0, errorCategory: "internal", errorMessage: err.message })] };
+  const logStatus = targetStatus === "NEEDS_A_HAND" ? "FAILED" : "FAILED"; // log always uses FAILED category
+  const records: GatewayRecords = { job: failedJob, runs, artifact: null, supersededArtifactId: null, handoff, approval: null, logs: logs.length ? logs : [baseLog(ctx, newId, startedAt, user, permission, { status: logStatus, fallbackIndex: 0, errorCategory: "internal", errorMessage: err.message })] };
   await deps.store.commit(records);
   const lastValidation = [...attempts].reverse().find((a) => a.outcome === "failed_validation");
-  log({ event: "execute.failed", jobId: job.id, agent: agent.code, attempts: attempts.length, error: err.message });
+  log({ event: targetStatus === "NEEDS_A_HAND" ? "execute.needs_a_hand" : "execute.failed", jobId: job.id, agent: agent.code, attempts: attempts.length, error: err.message });
   const result: ExecutionResult = {
     provider: null,
     model: null,
@@ -229,9 +233,10 @@ function minimalSnapshot(job: AgentJob, ctx: JobContext): OSData {
   return { ...EMPTY, agentJobs: [job], artifacts: ctx.previousOutput ? [ctx.previousOutput] : [], handoffs: ctx.handoff ? [ctx.handoff] : [] };
 }
 
-const EMPTY: OSData = {
+export const EMPTY: OSData = {
   clients: [], projects: [], phases: [], agents: [], pages: [], tickets: [], artifacts: [], qaItems: [], qaRuns: [], launchHolds: [], approvals: [], gates: [], activity: [],
   agentJobs: [], agentRuns: [], handoffs: [], knowledgeItems: [], agentLessons: [], integrations: [], projectIntegrations: [], jobApprovals: [], executionLogs: [], skills: [], externalClients: [], externalAccessLog: [],
+  buildPacks: [], revisionRounds: [], changeRequests: [], clientAssets: [], curationCandidates: [], screenshotEvidence: [], modeBJobs: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {

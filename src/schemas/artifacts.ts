@@ -169,6 +169,88 @@ export const SCHEMAS = {
     }),
     overallFindings: shortList,
   }),
+  /**
+   * build_pack@1 — the single authoritative build contract (CTOS-005A Part 5).
+   * The build-pack assembler FAILS CLOSED on conflicts; Agent 05 consumes this only.
+   * Conflict records are included so a human can see exactly what blocked assembly.
+   */
+  "build_pack@1": z.object({
+    summary: nonEmpty,
+    projectId: nonEmpty,
+    version: z.number().int().min(1),
+    siteBlueprintArtifactId: nonEmpty.nullable(),
+    designSystemArtifactId: nonEmpty.nullable(),
+    contentPackArtifactId: nonEmpty.nullable(),
+    pages: z.array(z.object({
+      path: nonEmpty,
+      title: nonEmpty,
+      templateType: nonEmpty,
+      sectionRequirements: shortList,
+      contentMappings: z.record(z.string(), z.string()),
+      responsiveRequirements: shortList,
+      seoMeta: z.object({ title: nonEmpty, metaDescription: nonEmpty, h1: nonEmpty }),
+      assetRefs: z.array(z.string()).max(50),
+    })).min(1).max(200),
+    constraints: shortList,
+    permissions: z.array(z.enum(["GREEN", "AMBER", "RED"])).max(3),
+    acceptanceCriteria: shortList,
+    evidenceRequirements: shortList,
+    /** Non-empty → status is CONFLICT; human attention required before Builder proceeds. */
+    conflicts: z.array(z.object({
+      kind: z.enum([
+        "section_missing_from_blueprint",
+        "content_field_unresolvable",
+        "cross_project_artifact",
+        "design_contradicts_constraint",
+        "section_dependency_unavailable",
+        "missing_required_content",
+      ]),
+      detail: nonEmpty,
+      artifactIds: z.array(z.string()).max(10),
+    })).max(50),
+  }),
+
+  /**
+   * job_pack@1 — first-class renderable execution contract (CTOS-005A Part 7).
+   * Transportable through API, Claude subscription, ChatGPT, Gemini, Hermes, or human.
+   * MUST be secret-clean before export — secretScanStatus must be "clean".
+   */
+  "job_pack@1": z.object({
+    summary: nonEmpty,
+    jobId: nonEmpty,
+    projectId: nonEmpty,
+    ticketId: nonEmpty.nullable(),
+    agentCode: nonEmpty,
+    agentCharter: nonEmpty,
+    neverOwns: shortList,
+    operatingPass: z.enum(["DIRECTION", "COMPOSITION", "VISUAL_REVIEW"]).nullable(),
+    skillId: nonEmpty.nullable(),
+    skillVersion: z.number().int().min(1).nullable(),
+    projectBriefCard: nonEmpty,
+    inputArtifacts: z.array(z.object({
+      id: nonEmpty,
+      type: nonEmpty,
+      version: z.number().int().min(1),
+      title: nonEmpty,
+      summary: nonEmpty.nullable(),
+      originalContentChars: z.number().int().min(0).nullable(),
+    })).max(20),
+    approvedLessons: z.array(z.object({
+      id: nonEmpty,
+      title: nonEmpty,
+      content: nonEmpty,
+      scope: z.enum(["DOCTRINE", "AGENCY", "PROJECT", "TASK"]),
+    })).max(20),
+    constraints: shortList,
+    permissions: z.array(z.enum(["GREEN", "AMBER", "RED"])).max(3),
+    task: nonEmpty,
+    outputSchema: nonEmpty,
+    validationRequirements: shortList,
+    evidenceExpectations: shortList,
+    secretScanStatus: z.enum(["clean", "flagged"]),
+    secretScanIssues: z.array(z.string()).max(20),
+  }),
+
   "other@1": z.object({ summary: nonEmpty, content: z.unknown().optional() }),
 } as const;
 
@@ -264,6 +346,54 @@ export const EXAMPLES: Record<SchemaName, unknown> = {
     ],
     trustRecommendation: { verdict: "TRUST_WITH_CONDITIONS", rationale: "Stub.", conditions: ["Stub condition"] },
     overallFindings: ["Stub finding"],
+  },
+  "build_pack@1": {
+    summary: "Stub build pack — no actual content assembled.",
+    projectId: "proj_stub",
+    version: 1,
+    siteBlueprintArtifactId: null,
+    designSystemArtifactId: null,
+    contentPackArtifactId: null,
+    pages: [
+      {
+        path: "/",
+        title: "Home",
+        templateType: "page",
+        sectionRequirements: ["Hero", "Services overview", "CTA"],
+        contentMappings: { hero_headline: "Welcome", hero_subtext: "Quality you can trust." },
+        responsiveRequirements: ["Mobile-first", "Tablet breakpoint at 768px"],
+        seoMeta: { title: "Home | Stub Site", metaDescription: "Stub meta description.", h1: "Welcome" },
+        assetRefs: [],
+      },
+    ],
+    constraints: ["No custom JS", "Elementor Pro sections only"],
+    permissions: ["GREEN"],
+    acceptanceCriteria: ["All sections render on mobile and desktop", "No placeholder text"],
+    evidenceRequirements: ["Screenshot of each built page at mobile and desktop viewport"],
+    conflicts: [],
+  },
+  "job_pack@1": {
+    summary: "Stub job pack.",
+    jobId: "job_stub",
+    projectId: "proj_stub",
+    ticketId: null,
+    agentCode: "A01",
+    agentCharter: "Agent 01 Discovery — research and surface business context, existing site findings, competitors and risks.",
+    neverOwns: ["Gate decisions", "Skill promotion", "Client commitments"],
+    operatingPass: null,
+    skillId: null,
+    skillVersion: null,
+    projectBriefCard: "Stub project: a waterproofing products supplier seeking a new website.",
+    inputArtifacts: [],
+    approvedLessons: [],
+    constraints: ["Output must be grounded in observable evidence only"],
+    permissions: ["GREEN"],
+    task: "Research the client's business, existing site and competitive landscape. Produce a research_report@1 artifact.",
+    outputSchema: "research_report@1",
+    validationRequirements: ["All sources must be cited in evidenceRef format"],
+    evidenceExpectations: ["At least one source per major finding"],
+    secretScanStatus: "clean",
+    secretScanIssues: [],
   },
   "other@1": { summary: "Stub output." },
 };

@@ -64,7 +64,7 @@ describe("Claude adapter (live path, fake transport)", () => {
     expect(call.init.headers.authorization).toBeUndefined();
     const body = JSON.parse(call.init.body) as { model: string; system: string; messages: { role: string; content: string }[]; tools: { name: string; input_schema: { properties: Record<string, unknown> } }[]; tool_choice: { type: string; name: string } };
     expect(body.model).toBe("claude-3-5-sonnet-20241022");
-    expect(body.system).toContain("08 Intelligence Curator");
+    expect(body.system).toContain("08 Curator");
     expect(body.system).toContain("DOCTRINE (permanent Creative Touch rules)");
     expect(body.messages[0].content).toContain("INPUT ARTIFACTS");
     expect(body.tools[0].name).toBe("emit_ctos_output");

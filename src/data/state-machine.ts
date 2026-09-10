@@ -6,9 +6,11 @@ export const PROJECT_STATES: ProjectState[] = [
   "STRATEGY",
   "DESIGN",
   "CONTENT",
+  "DESIGN_AND_CONTENT",
   "READY_TO_BUILD",
   "BUILDING",
   "QA",
+  "CLIENT_REVIEW",
   "READY_TO_LAUNCH",
   "LIVE",
   "MAINTENANCE",
@@ -19,34 +21,50 @@ export const PROJECT_STATE_LABELS: Record<ProjectState, string> = {
   NEW: "New",
   DISCOVERY: "Discovery",
   STRATEGY: "Strategy",
+  // Legacy sequential states preserved for backward compatibility with existing projects.
   DESIGN: "Design",
   CONTENT: "Content",
+  // Workflow V1 concurrent state (CTOS-005A Part 4).
+  // Subtracks tracked via project.designComplete / project.contentComplete flags on the Project.
+  DESIGN_AND_CONTENT: "Design + Content",
   READY_TO_BUILD: "Ready to Build",
   BUILDING: "Building",
   QA: "QA",
+  CLIENT_REVIEW: "Client Review",
   READY_TO_LAUNCH: "Ready to Launch",
   LIVE: "Live",
   MAINTENANCE: "Maintenance",
   ARCHIVED: "Archived",
 };
 
-/** Forward flow, plus explicit backward transitions. ARCHIVED is reachable from any sensible state. */
+/**
+ * Forward flow for Workflow V1 (CTOS-005A Part 3).
+ * DESIGN and CONTENT legacy states forward to DESIGN_AND_CONTENT (additive migration path).
+ * CLIENT_REVIEW is a new explicit gate before READY_TO_LAUNCH.
+ */
 const NEXT: Partial<Record<ProjectState, ProjectState>> = {
   NEW: "DISCOVERY",
   DISCOVERY: "STRATEGY",
-  STRATEGY: "DESIGN",
-  DESIGN: "CONTENT",
+  // Legacy path: sequential design then content (kept for historical projects)
+  STRATEGY: "DESIGN_AND_CONTENT",
+  DESIGN: "DESIGN_AND_CONTENT",
   CONTENT: "READY_TO_BUILD",
+  // Workflow V1 path: concurrent design+content → ready to build
+  DESIGN_AND_CONTENT: "READY_TO_BUILD",
   READY_TO_BUILD: "BUILDING",
   BUILDING: "QA",
-  QA: "READY_TO_LAUNCH",
+  QA: "CLIENT_REVIEW",
+  CLIENT_REVIEW: "READY_TO_LAUNCH",
   READY_TO_LAUNCH: "LIVE",
   LIVE: "MAINTENANCE",
 };
 
 const BACKWARD: Partial<Record<ProjectState, ProjectState[]>> = {
   QA: ["BUILDING"],
-  READY_TO_LAUNCH: ["QA"],
+  CLIENT_REVIEW: ["QA"],
+  READY_TO_LAUNCH: ["CLIENT_REVIEW", "QA"],
+  // Allow returning to design+content from ready_to_build when approved artifacts need revision
+  READY_TO_BUILD: ["DESIGN_AND_CONTENT"],
 };
 
 export function nextState(state: ProjectState): ProjectState | null {
@@ -72,14 +90,51 @@ export const STATE_PROGRESS: Record<ProjectState, number> = {
   DISCOVERY: 8,
   STRATEGY: 18,
   DESIGN: 30,
-  CONTENT: 42,
+  CONTENT: 40,
+  DESIGN_AND_CONTENT: 35,
   READY_TO_BUILD: 50,
   BUILDING: 65,
-  QA: 80,
+  QA: 78,
+  CLIENT_REVIEW: 85,
   READY_TO_LAUNCH: 92,
   LIVE: 100,
   MAINTENANCE: 100,
   ARCHIVED: 100,
+};
+
+/**
+ * Workflow V1 stage labels (informational — the state machine is still the authority).
+ * Used in UI and reporting to orient the operator without exposing implementation details.
+ */
+export const WORKFLOW_STAGE_LABELS: Record<number, string> = {
+  0: "Intake",
+  1: "Discovery",
+  2: "Architecture + Direction",
+  3: "Design + Content",
+  4: "Build",
+  5: "Client Review",
+  6: "Launch",
+  7: "Maintenance + Learning",
+};
+
+/**
+ * Maps project states to the corresponding Workflow V1 stage (CTOS-005A Part 3).
+ * Stages are informational; the state machine transitions remain the authority.
+ */
+export const STATE_TO_WORKFLOW_STAGE: Partial<Record<ProjectState, number>> = {
+  NEW: 0,
+  DISCOVERY: 1,
+  STRATEGY: 2,
+  DESIGN: 3,
+  CONTENT: 3,
+  DESIGN_AND_CONTENT: 3,
+  READY_TO_BUILD: 3,
+  BUILDING: 4,
+  QA: 4,
+  CLIENT_REVIEW: 5,
+  READY_TO_LAUNCH: 6,
+  LIVE: 7,
+  MAINTENANCE: 7,
 };
 
 export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
