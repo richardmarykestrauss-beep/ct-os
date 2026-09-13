@@ -10,6 +10,12 @@
  * Flow: capture → A01 → A02 → (A03 ‖ A04) → A06 → synthesis. Downstream jobs receive the capture
  * artifact plus every upstream output that actually completed. One agent failing yields PARTIAL;
  * no agent completing yields NEEDS_A_HAND. Production tickets are never touched.
+ *
+ * CTOS-008M: A07 and A08 are deliberately never part of this list (`AuditPhase` below is a closed
+ * union of exactly these five phases). A07 (Launch & Infrastructure) requires an authenticated
+ * client project and AMBER/RED permission to touch real infrastructure — a public, unauthenticated
+ * prospect audit has neither. A08 (Curator) only ever runs event-triggered off real QA/client
+ * feedback or on a schedule (see its seed definition) — a one-shot public audit produces neither.
  */
 import type { AgentJob, ArtifactType, AuditFinding, AuthUser, OSData } from "@/data/types";
 import { AGENT_IDS } from "@/data/seed";

@@ -325,6 +325,26 @@ describe("audit orchestration — canonical AgentJob path", () => {
     expect(d.auditFindings.some((f) => f.agentId === AGENT_IDS.A04)).toBe(true);
   });
 
+  it("CTOS-008M: A06's preferred provider (OpenAI) unconfigured in production — Claude fallback completes A06 and synthesis reports COMPLETE", async () => {
+    // Reproduces the production Agents-screen observation (OpenAI: NOT CONFIGURED, Claude/Gemini:
+    // CONNECTED) for the one agent whose PREFERRED provider is openai. Proves the router/fallback
+    // path itself was never the bug — CTOS-008L's job-lifecycle fix was the actual and sufficient
+    // fix for A06 getting stuck QUEUED; an unconfigured preferred provider alone does not stall it.
+    const openaiUnconfigured = stubs({ openai: { available: false, unavailableReason: "not configured (OPENAI_API_KEY)" } });
+    const h = harness(base(), perAgentGateway((agentId) => (agentId === AGENT_IDS.A06 ? openaiUnconfigured : stubs())));
+    const summary = await h.run();
+    const d = h.data;
+    const a06 = jobOf(d, AGENT_IDS.A06);
+    expect(a06.status).toBe("COMPLETED");
+    const a06Runs = d.agentRuns.filter((r) => r.jobId === a06.id);
+    expect(a06Runs.map((r) => [r.providerId, r.status])).toEqual([
+      ["openai", "SKIPPED"],
+      ["claude", "SUCCEEDED"],
+    ]);
+    expect(summary.status).toBe("COMPLETE");
+    expect(request(d).status).toBe("COMPLETE");
+  });
+
   it("phase definitions: five specialists, A06 last, A05/A07/A08 never involved", () => {
     expect(AUDIT_PHASES.map((p) => p.agentId)).toEqual([AGENT_IDS.A01, AGENT_IDS.A02, AGENT_IDS.A03, AGENT_IDS.A04, AGENT_IDS.A06]);
     expect(AUDIT_PHASES.find((p) => p.phase === "A03")!.instructions).toMatch(/VISUAL_NOT_VERIFIED/);
