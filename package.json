@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Creative Touch Website OS — internal AI-assisted website production control plane (MVP)",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
