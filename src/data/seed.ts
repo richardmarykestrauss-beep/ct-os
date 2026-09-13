@@ -1067,6 +1067,22 @@ export const seedData: OSData = {
  * it is what gets written the first time a real production database is empty and persist() runs.
  * `seedData` above remains the default for InMemoryRepository and stays the seed local dev and
  * automated tests use when they explicitly want the U-Proof demo.
+ *
+ * CTOS-008J: also sanitises two dangling references into the demo dataset that survived the
+ * top-level collection wipe above — `FakeSupabaseClient` (used by every test) enforces neither
+ * foreign keys nor column types, so nothing caught these until generating a real SQL migration
+ * from this data did:
+ *   - `agents.current_project_id` is a real FK (`references projects(id)`); ORCH's seed value
+ *     pointed at the U-Proof demo project, which does not exist once `projects` is wiped above.
+ *     A single bad row fails the *entire* multi-row insert, atomically — this alone was enough to
+ *     make every canonical agent fail to write, not just ORCH.
+ *   - `skills.approved_by_id` is a `uuid` column; one skill's seed value was a fixture placeholder
+ *     ("u_admin_seed"), not a real UUID — Postgres rejects the whole batch on the type mismatch.
+ * Both are nulled out here (never leave a project instance dangling reference in the sole record
+ * every fresh install starts from) — `approvedBy` (the plain-text attribution) is untouched.
+ * A DOCTRINE item's `evidence` array citing a demo approval id ("appr_up_launch", free text inside
+ * jsonb — not a constrained column, so it wouldn't fail an insert, just point at a record that will
+ * never exist) is replaced with a demo-independent citation for the same reason.
  */
 export const productionBootstrapData: OSData = {
   ...seedData,
@@ -1081,7 +1097,11 @@ export const productionBootstrapData: OSData = {
   launchHolds: [],
   approvals: [],
   activity: [],
-  knowledgeItems: seedData.knowledgeItems.filter((k) => k.scope === "DOCTRINE"),
+  agents: seedData.agents.map((a) => ({ ...a, currentProjectId: null, currentTicketId: null })),
+  skills: seedData.skills.map((s) => ({ ...s, approvedById: null })),
+  knowledgeItems: seedData.knowledgeItems
+    .filter((k) => k.scope === "DOCTRINE")
+    .map((k) => (k.id === "kn_doctrine_launch" ? { ...k, evidence: ["state-machine SAFETY_PIPELINE — LAUNCH gate"] } : k)),
   agentLessons: [],
 };
 
