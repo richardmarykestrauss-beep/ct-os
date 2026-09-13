@@ -18,6 +18,8 @@
     "security:scan": "node scripts/security-scan.mjs",
     "gateway:check": "npx --yes deno check --config supabase/functions/agent-execute/deno.json supabase/functions/agent-execute/index.ts && npm run gateway:bundle && npx --yes deno check --no-config supabase/functions/agent-execute/dist/index.js",
     "gateway:bundle": "node scripts/bundle-edge-function.mjs",
+    "build:vercel-functions": "node scripts/bundle-vercel-functions.mjs",
+    "vercel-build": "npm run build && npm run build:vercel-functions",
     "mcp:build": "node scripts/bundle-mcp-server.mjs",
     "mcp:start": "node dist/mcp-server/index.js"
   },

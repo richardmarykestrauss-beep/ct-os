@@ -1,13 +1,16 @@
 /**
  * Vercel production handler for POST /api/site-capture.
  *
+ * Source for the deployed api/site-capture.js — see scripts/bundle-vercel-functions.mjs and
+ * agent-execute.ts's docstring for why this is pre-bundled.
+ *
  * Imports the exact same capture core the Vite dev middleware serves at /site-capture
  * (src/gateway/site-capture.ts) — no capture logic is duplicated between local dev and
  * production. Node.js runtime required: DNS-rebinding protection uses `node:dns/promises`,
  * which an Edge runtime does not provide (see vercel.json).
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { captureSite, MAX_PAGES } from "../src/gateway/site-capture.js";
+import { captureSite, MAX_PAGES } from "@/gateway/site-capture";
 
 export const config = { runtime: "nodejs" };
 

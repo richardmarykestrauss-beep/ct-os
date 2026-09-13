@@ -1,6 +1,13 @@
 /**
  * Vercel production handler for POST /api/agent-execute.
  *
+ * Source for the deployed api/agent-execute.js — see scripts/bundle-vercel-functions.mjs.
+ * Pre-bundled (esbuild, `@/…` aliases resolved and inlined) because Vercel's Node Functions
+ * builder does not bundle multi-file TypeScript entries or understand the tsconfig "@/*" path
+ * alias at runtime; shipping a self-contained file sidesteps that entirely. Edit this file, run
+ * `npm run build:vercel-functions` (also wired into vercel.json's buildCommand), never edit the
+ * generated api/*.js output by hand.
+ *
  * Imports the exact same gateway the Vite dev middleware serves at /agent-execute
  * (src/gateway/node.ts, a thin Node wrapper over src/gateway/core.ts + gateway/http.ts — the same
  * core the Supabase Edge Function runs). No execution logic is duplicated between local dev, the
@@ -8,9 +15,9 @@
  * policy/fallback, structured-output validation, runs/execution-log recording and audit
  * orchestration semantics are the one implementation, imported everywhere.
  *
- * GET /api/agent-execute/health is served by the sibling file api/agent-execute/health.ts (Vercel
+ * GET /api/agent-execute/health is served by the sibling entry agent-execute-health.ts (Vercel
  * routes on the exact file path; `handleGatewayHttp` only branches on method + a "/health" path
- * suffix, so both files can safely share this one handler unmodified).
+ * suffix, so both entries can safely share this one handler unmodified).
  *
  * Node.js runtime required: provider adapters use Node `fetch`/`AbortSignal`, and the Supabase
  * server client used here is not Edge-compatible (see vercel.json).
@@ -19,7 +26,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createNodeGatewayHandler } from "../src/gateway/node.js";
+import { createNodeGatewayHandler } from "@/gateway/node";
 
 export const config = { runtime: "nodejs" };
 
