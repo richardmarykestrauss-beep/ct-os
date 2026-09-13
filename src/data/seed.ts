@@ -1097,7 +1097,17 @@ export const productionBootstrapData: OSData = {
   launchHolds: [],
   approvals: [],
   activity: [],
-  agents: seedData.agents.map((a) => ({ ...a, currentProjectId: null, currentTicketId: null })),
+  // agents.exclusions and agents.instruction_pack_ids are NOT NULL jsonb columns (supabase/migrations/
+  // 0003_intelligence_model.sql) — several canonical agents (ORCH, A01, A04, A06, A07, A08) leave these
+  // TS-optional fields unset, which toRow() serializes as an explicit NULL and Postgres rejects. Default
+  // to the DB's own empty-array default so every agent round-trips into a real insert.
+  agents: seedData.agents.map((a) => ({
+    ...a,
+    currentProjectId: null,
+    currentTicketId: null,
+    exclusions: a.exclusions ?? [],
+    instructionPackIds: a.instructionPackIds ?? [],
+  })),
   skills: seedData.skills.map((s) => ({ ...s, approvedById: null })),
   knowledgeItems: seedData.knowledgeItems
     .filter((k) => k.scope === "DOCTRINE")

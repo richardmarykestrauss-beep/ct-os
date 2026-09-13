@@ -75,6 +75,50 @@ const COLUMN_TYPES = {
   },
 };
 
+// Columns the live schema declares NOT NULL (supabase/migrations/0001, 0003) — cross-checked
+// against the actual .sql files, not inferred from TypeScript types, because toRow() silently
+// turns a TS-optional (undefined) field into an explicit NULL (see mapping.ts), which the DB
+// then rejects for any of these. CTOS-008K: this generator used to trust TS optionality alone and
+// shipped a migration where agents.exclusions/instruction_pack_ids were NULL for several agents.
+const NOT_NULL_COLUMNS = {
+  agents: [
+    "code", "short_code", "name", "role", "responsibilities", "status", "outputs_produced",
+    "provider_policy", "permission_level", "required_capabilities", "produces_artifact_types",
+    "consumes_artifact_types", "can_execute_site_changes", "exclusions", "instruction_pack_ids",
+  ],
+  gates: ["key", "label", "order", "requires_human_approval", "required_artifact_types", "confirm_on_open_holds", "description"],
+  skills: ["name", "version", "kind", "status", "scope", "owner_agent_ids", "reviewer_agent_ids", "content", "evidence"],
+  integrations: ["name", "plane", "purpose", "status"],
+  section_library: [], // every column but id is nullable (no NOT NULL in 0004)
+  knowledge_items: ["scope", "category", "title", "content", "evidence", "confidence", "status"],
+};
+
+// uuid-typed columns: a non-null value that isn't a real UUID fails the insert with a cast error
+// (this is exactly how the "u_admin_seed" placeholder broke skills in CTOS-008J).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Columns that must be null in an install-time system-reference seed because the tables they'd
+// reference (projects, tickets) are never seeded here — any non-null value is a dangling FK
+// pointing at demo/project data that doesn't exist yet (this is exactly how ORCH's
+// current_project_id="proj_uproof" broke the entire agents insert in CTOS-008J).
+const MUST_BE_NULL_COLUMNS = {
+  agents: ["current_project_id", "current_ticket_id"],
+};
+
+function validateRow(table, row, errors) {
+  for (const col of NOT_NULL_COLUMNS[table] ?? []) {
+    if (row[col] === null || row[col] === undefined) errors.push(`${table}.${row.id ?? "?"}: column "${col}" is NOT NULL but got ${row[col]}`);
+  }
+  for (const col of MUST_BE_NULL_COLUMNS[table] ?? []) {
+    if (row[col] !== null && row[col] !== undefined) errors.push(`${table}.${row.id ?? "?"}: column "${col}" must be null in a system-reference seed (dangling reference to "${row[col]}")`);
+  }
+  for (const [col, type] of Object.entries(COLUMN_TYPES[table] ?? {})) {
+    if (type === "uuid" && row[col] != null && !UUID_RE.test(String(row[col]))) {
+      errors.push(`${table}.${row.id ?? "?"}: column "${col}" is uuid-typed but got non-UUID value "${row[col]}"`);
+    }
+  }
+}
+
 function sqlLiteral(value, type) {
   if (value === null || value === undefined) return "NULL";
   switch (type) {
@@ -109,10 +153,12 @@ const SYSTEM_REFERENCE = [
 ];
 
 const specByTable = new Map(TABLES.map((s) => [s.table, s]));
+const errors = [];
 const sections = [];
 for (const { key, table } of SYSTEM_REFERENCE) {
   const spec = specByTable.get(table);
   const rows = productionBootstrapData[key].map((entity) => toRow(entity));
+  for (const row of rows) validateRow(table, row, errors);
   const stmts = rows.map((row) => insertStatement(table, COLUMN_TYPES[table], row));
   sections.push(`-- ---------------------------------------------------------------- ${table} (${rows.length} row${rows.length === 1 ? "" : "s"})\n${stmts.join("\n")}`);
 }
@@ -120,7 +166,14 @@ for (const { key, table } of SYSTEM_REFERENCE) {
 const doctrineSpec = specByTable.get("knowledge_items");
 void doctrineSpec;
 const doctrineRows = productionBootstrapData.knowledgeItems.filter((k) => k.scope === "DOCTRINE").map((entity) => toRow(entity));
+for (const row of doctrineRows) validateRow("knowledge_items", row, errors);
 sections.push(`-- ---------------------------------------------------------------- knowledge_items (DOCTRINE only, ${doctrineRows.length} row${doctrineRows.length === 1 ? "" : "s"})\n${doctrineRows.map((row) => insertStatement("knowledge_items", COLUMN_TYPES.knowledge_items, row)).join("\n")}`);
+
+if (errors.length) {
+  console.error(`Refusing to generate 0005_system_reference_seed.sql — ${errors.length} row(s) would violate real Postgres constraints:`);
+  for (const e of errors) console.error(`  - ${e}`);
+  process.exit(1);
+}
 
 const header = `-- Creative Touch Website OS — CTOS-008J: explicit system reference seed
 --
