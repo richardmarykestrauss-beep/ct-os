@@ -277,6 +277,14 @@ export type ArtifactType =
   // CTOS-006 additions
   | "website_change_plan"
   | "wp_write_result"
+  // CTOS-007 additions
+  | "website_audit_report"
+  | "audit_capture"
+  | "audit_discovery"
+  | "audit_architecture"
+  | "audit_creative"
+  | "audit_content_analysis"
+  | "audit_qa_review"
   | "other";
 
 export type ArtifactStatus = "DRAFT" | "FINAL" | "SUPERSEDED" | "REJECTED";
@@ -1344,6 +1352,9 @@ export interface OSData {
   websiteWriteResults: WebsiteWriteResult[];
   wpWriteAuditLog: WpWriteAuditEntry[];
   wpIdempotencyLog: WpIdempotencyRecord[];
+  // CTOS-007 additions (default to [] in all existing seeds/EMPTY objects)
+  websiteAuditRequests: WebsiteAuditRequest[];
+  auditFindings: AuditFinding[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1687,6 +1698,10 @@ export interface WordPressSiteConnection {
   hostProvider: string | null;
   /** When true, the host can be swapped without changing project identity or write provenance. */
   hostReplaceable: boolean;
+  /** CT Bridge plugin reachability, independent of authMethod (a site may use application_password with the bridge installed but unused). Optional: absent = never checked. */
+  ctBridgeStatus?: "CONNECTED" | "NOT_CONNECTED" | "UNKNOWN";
+  /** WooCommerce presence, for future commerce-aware write actions. Optional: absent = never checked. */
+  wooCommerceStatus?: "ACTIVE" | "NOT_INSTALLED" | "UNKNOWN";
   createdAt: ISODate | null;
   updatedAt: ISODate | null;
 }
@@ -2019,6 +2034,112 @@ export interface WpDiffModel {
   elementorDiffs: WpElementorPropertyDiff[];
   structuralChanges: WpStructuralChange[];
 }
+
+// ---------------------------------------------------------------------------
+// CTOS-007: Website Audit Engine
+// ---------------------------------------------------------------------------
+
+export type AuditType = "PUBLIC_PROSPECT" | "CLIENT_DEEP_AUDIT";
+
+export type AuditStatus =
+  | "PENDING"
+  | "CAPTURING"
+  | "RUNNING"
+  /** @deprecated pre-007A name for RUNNING; kept so persisted rows still type-check. */
+  | "ANALYSING"
+  | "COMPLETE"
+  | "PARTIAL"
+  | "NEEDS_A_HAND"
+  | "FAILED"
+  | "CANCELLED";
+
+/** CRITICAL = revenue/trust blocker; MAJOR = significant impact; MINOR = noticeable but low impact; COSMETIC = polish only */
+export type FindingSeverity = "CRITICAL" | "MAJOR" | "MINOR" | "COSMETIC";
+
+/**
+ * OBSERVED = directly seen in the public HTML/DOM; INFERRED = deduced from patterns, not directly seen;
+ * PROPOSED = recommendation not backed by a specific observation; VERIFIED = confirmed by multiple signals.
+ */
+export type FindingClaimType = "OBSERVED" | "INFERRED" | "PROPOSED" | "VERIFIED";
+
+export type FindingCategory =
+  | "TRAFFIC"
+  | "MESSAGE"
+  | "TRUST"
+  | "CONVERSION"
+  | "FOLLOW_UP"
+  | "TECHNICAL"
+  | "SEO"
+  | "UX"
+  | "VISUAL"
+  | "OTHER";
+
+export interface ServiceOpportunity {
+  service: string;
+  rationale: string;
+  estimatedImpact: "HIGH" | "MEDIUM" | "LOW";
+}
+
+export interface WebsiteAuditRequest {
+  id: string;
+  projectId: string | null;
+  /** Validated, normalised URL (https only after validation). */
+  targetUrl: string;
+  auditType: AuditType;
+  status: AuditStatus;
+  /** Step-by-step progress messages (appended as the audit runs). */
+  progressLog: string[];
+  /** IDs of agent jobs created for this audit (for Agents/Runs visibility). */
+  auditJobIds: string[];
+  /** ID of the artifact produced when status is COMPLETE or PARTIAL. */
+  resultArtifactId: string | null;
+  /** Human-readable failure reason when status is FAILED or NEEDS_A_HAND. */
+  failureReason: string | null;
+  /** Set when an operator has reviewed the outcome; clears the attention item and Next Step. */
+  reviewedAt: ISODate | null;
+  requestedById: string | null;
+  requestedByName: string | null;
+  createdAt: ISODate | null;
+  updatedAt: ISODate | null;
+}
+
+export interface AuditFinding {
+  id: string;
+  auditRequestId: string;
+  projectId: string | null;
+  /** Agent that produced this finding, or null for heuristic findings. */
+  agentId: string | null;
+  category: FindingCategory;
+  severity: FindingSeverity;
+  claimType: FindingClaimType;
+  title: string;
+  detail: string;
+  /** Direct evidence: URL, page element, screenshot reference, etc. */
+  evidence: string;
+  /** Business impact of this finding — concise, commercial framing. */
+  businessImpact: string | null;
+  /** Specific URL this finding applies to, if not the homepage. */
+  affectedUrl: string | null;
+  /** Rough effort estimate for fixing (e.g. "1–2 hours", "1 day", "2–3 days"). */
+  estimatedEffort: string | null;
+  /** Optional improvement suggestion. */
+  recommendation: string | null;
+  serviceOpportunity: ServiceOpportunity | null;
+  /** RAW = as produced by one specialist/heuristic; CONSOLIDATED = client-facing canonical issue. Absent = RAW. */
+  kind?: FindingKind;
+  /** Contributing sources of a consolidated finding: agent ids, or "heuristic". */
+  contributors?: string[];
+  /** Raw finding ids merged into a consolidated finding. */
+  sourceFindingIds?: string[];
+  /** Every URL contributing findings cited. */
+  affectedUrls?: string[];
+  /** A06 verdict as applied. Absent = not reviewed by A06. */
+  qaStatus?: FindingQaStatus;
+  createdAt: ISODate | null;
+}
+
+export type FindingKind = "RAW" | "CONSOLIDATED";
+export type FindingQaStatus = "CONFIRMED" | "CHALLENGED" | "UNREVIEWED";
 
 // Part 30 — U-Proof site connection onboarding checklist
 export interface WpConnectionChecklistItem {

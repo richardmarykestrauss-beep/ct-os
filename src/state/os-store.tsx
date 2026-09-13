@@ -26,20 +26,23 @@ import type {
   TicketApprovalState,
   TicketStatus,
 } from "@/data/types";
-import type { ActorRef, AgentProviderPolicy, AuthUser, ExternalClientType, ExternalPermissionCeiling, KnowledgeScope, QARun } from "@/data/types";
+import type { ActorRef, AgentProviderPolicy, ArtifactType, AuditFinding, AuditStatus, AuthUser, ExternalClientType, ExternalPermissionCeiling, KnowledgeScope, QARun, ServiceOpportunity, WebsiteAuditRequest } from "@/data/types";
 import { PHASES, PROJECT_STATE_LABELS, STATE_PROGRESS, canTransition } from "@/data/state-machine";
 import { AGENT_IDS } from "@/data/seed";
 import { InMemoryRepository, type OSRepository, type RepositoryChoice } from "@/services/repository";
 import { createArtifact } from "@/services/artifacts";
-import { applyGatewayRecords, approveJobOutput, cancelJob, createJobForTicket, requestJobRevision, startJob } from "@/services/agent-jobs";
+import { applyGatewayRecords, approveJobOutput, cancelJob, createJob, createJobForTicket, requestJobRevision, startJob } from "@/services/agent-jobs";
 import { authorizeRedJob, checkPermission, decideJobApproval, effectiveLevel, requestJobApproval, type PermissionCheck } from "@/services/job-approvals";
 import { proposeLesson, reviewKnowledgeItem, type ProposeLessonInput, type ReviewDecision } from "@/services/knowledge";
 import { createExternalClient, generateExternalClientToken, revokeExternalClient, rotateExternalClientToken, setExternalClientStatus, type ExternalClientActor } from "@/services/external-clients";
 import { PROVIDER_LABELS } from "@/ai/registry";
 import type { GatewayClient } from "@/gateway/client";
-import { EmbeddedGatewayClient } from "@/gateway/client";
+import { EmbeddedGatewayClient, HttpGatewayClient } from "@/gateway/client";
 import type { GatewayResponse } from "@/gateway/core";
 import { newId, nowIso } from "@/lib/utils";
+import { createAuditRequest as _createAuditRequest, updateAuditRequest as _updateAuditRequest, type AuditRequestPatch } from "@/services/website-audit";
+import { runAuditPipeline, type CaptureResult } from "@/services/audit-orchestrator";
+import type { SiteCapture } from "@/services/site-digest";
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -77,7 +80,17 @@ type Action =
   | { type: "CREATE_EXTERNAL_CLIENT"; id: string; rawToken: string; name: string; clientType: ExternalClientType; permissionCeiling: ExternalPermissionCeiling; actor: AuthUser }
   | { type: "SET_EXTERNAL_CLIENT_STATUS"; clientId: string; status: "ACTIVE" | "DISABLED"; actor: AuthUser }
   | { type: "ROTATE_EXTERNAL_CLIENT_TOKEN"; clientId: string; rawToken: string; actor: AuthUser }
-  | { type: "REVOKE_EXTERNAL_CLIENT"; clientId: string; actor: AuthUser };
+  | { type: "REVOKE_EXTERNAL_CLIENT"; clientId: string; actor: AuthUser }
+  // CTOS-007A: Website Audit Engine — the request is the run record; specialists are canonical AgentJobs
+  | { type: "CREATE_AUDIT_REQUEST"; requestId: string; targetUrl: string; auditType: "PUBLIC_PROSPECT" | "CLIENT_DEEP_AUDIT"; projectId?: string | null; actor: AuthUser }
+  | { type: "AUDIT_UPDATE"; requestId: string; patch: AuditRequestPatch; actor: AuthUser }
+  | { type: "AUDIT_CAPTURED"; requestId: string; capture: SiteCapture; artifactId: string; actor: AuthUser }
+  | { type: "AUDIT_JOBS_CREATED"; requestId: string; captureArtifactId: string; jobs: Array<{ id: string; agentId: string; outputType: ArtifactType; instructions: string; title: string }>; actor: AuthUser }
+  | { type: "AUDIT_JOB_START"; jobId: string; inputArtifactIds: string[]; actor: AuthUser }
+  | { type: "AUDIT_JOB_SETTLE"; jobId: string; requestId: string; actor: AuthUser }
+  | { type: "AUDIT_COMPLETE"; requestId: string; status: Extract<AuditStatus, "COMPLETE" | "PARTIAL" | "NEEDS_A_HAND">; findings: AuditFinding[]; reportContent: Record<string, unknown>; summary: string; serviceOpportunities: ServiceOpportunity[]; actor: AuthUser }
+  | { type: "AUDIT_FAILED"; requestId: string; reason: string; actor: AuthUser }
+  | { type: "AUDIT_REVIEWED"; requestId: string; actor: AuthUser };
 
 function ref(user: AuthUser): ActorRef {
   return { id: user.id, name: user.displayName };
@@ -547,6 +560,158 @@ function reducer(data: OSData, action: Action): OSData {
     case "NOTE": {
       return { ...data, activity: pushActivity(data, action.projectId, "NOTE", action.message, undefined, ref(action.actor)) };
     }
+
+    // CTOS-007A: Website Audit Engine
+    case "CREATE_AUDIT_REQUEST": {
+      const result = _createAuditRequest(data, {
+        id: action.requestId,
+        targetUrl: action.targetUrl,
+        auditType: action.auditType,
+        projectId: action.projectId,
+        requestedById: action.actor.id,
+        requestedByName: action.actor.displayName,
+      });
+      if (!result.ok) return data;
+      return { ...result.data, activity: pushActivity(result.data, action.projectId ?? null, "NOTE", `Audit requested: ${result.request.targetUrl}`, undefined, ref(action.actor)) };
+    }
+
+    case "AUDIT_UPDATE":
+      return _updateAuditRequest(data, action.requestId, action.patch);
+
+    case "AUDIT_CAPTURED": {
+      const request = data.websiteAuditRequests.find((r) => r.id === action.requestId);
+      if (!request) return data;
+      const created = createArtifact(data, {
+        id: action.artifactId,
+        projectId: auditProjectId(request),
+        type: "audit_capture",
+        title: `Capture — ${hostOf(request.targetUrl)}`,
+        createdByAgentId: null,
+        status: "FINAL",
+        summary: `${action.capture.pages.length} page(s) captured, ${action.capture.skippedUrls.length} skipped, ${action.capture.screenshots.length} screenshot(s).`,
+        content: action.capture,
+      });
+      return _updateAuditRequest(created.data, action.requestId, { progressMessage: `Capture evidence stored (${action.capture.pages.length} page digest(s)).` });
+    }
+
+    case "AUDIT_JOBS_CREATED": {
+      const request = data.websiteAuditRequests.find((r) => r.id === action.requestId);
+      if (!request) return data;
+      const projectId = auditProjectId(request);
+      let next = data;
+      const created: string[] = [];
+      for (const j of action.jobs) {
+        try {
+          next = createJob(next, { id: j.id, projectId, agentId: j.agentId, instructions: j.instructions, inputArtifactIds: [action.captureArtifactId], outputArtifactType: j.outputType, requestedById: action.actor.id }).data;
+          created.push(j.id);
+        } catch (err) {
+          next = _updateAuditRequest(next, action.requestId, { progressMessage: `Could not queue ${j.agentId}: ${err instanceof Error ? err.message : String(err)}` });
+        }
+      }
+      next = _updateAuditRequest(next, action.requestId, { auditJobIds: created });
+      return { ...next, activity: pushActivity(next, request.projectId, "JOB", `Audit queued ${created.length} specialist job(s) for ${request.targetUrl}`, undefined, ref(action.actor)) };
+    }
+
+    case "AUDIT_JOB_START": {
+      const existing = data.agentJobs.find((j) => j.id === action.jobId);
+      if (!existing || existing.status !== "QUEUED") return data;
+      try {
+        const withInputs: OSData = { ...data, agentJobs: data.agentJobs.map((j) => (j.id === action.jobId ? { ...j, inputArtifactIds: action.inputArtifactIds } : j)) };
+        const r = startJob(withInputs, action.jobId);
+        const request = data.websiteAuditRequests.find((x) => x.auditJobIds.includes(action.jobId));
+        const agents = r.data.agents.map((a) => (a.id !== r.job.agentId ? a : { ...a, status: "WORKING" as Agent["status"], statusDetail: request ? `Audit ${hostOf(request.targetUrl)}` : "Audit", currentProjectId: request?.projectId ?? a.currentProjectId, currentTicketId: null, lastRunAt: nowIso() }));
+        return { ...r.data, agents };
+      } catch {
+        return data;
+      }
+    }
+
+    case "AUDIT_JOB_SETTLE": {
+      // Audit passes are analysis, not site changes: a validated artifact completes the job (A06 reviews
+      // independently and the final report still goes to a human). Failures stay as the gateway left them.
+      const job = data.agentJobs.find((j) => j.id === action.jobId);
+      if (!job) return data;
+      let next = data;
+      if (job.status === "WAITING_APPROVAL") {
+        try {
+          next = approveJobOutput(next, job.id).data;
+        } catch {
+          return data;
+        }
+      }
+      const settled = next.agentJobs.find((j) => j.id === action.jobId)!;
+      const winner = next.agentRuns.find((r) => r.jobId === job.id && r.status === "SUCCEEDED");
+      const label = settled.status === "COMPLETED" ? `completed on ${winner ? PROVIDER_LABELS[winner.providerId] : "provider"}${winner?.model ? ` (${winner.model})` : ""}` : `${settled.status.toLowerCase().replace(/_/g, " ")}${settled.error ? ` — ${settled.error}` : ""}`;
+      next = _updateAuditRequest(next, action.requestId, { progressMessage: `${agentShortCode(next, job.agentId)} ${label}` });
+      const agents = next.agents.map((a) => (a.id !== job.agentId ? a : { ...a, status: "IDLE" as Agent["status"], statusDetail: undefined, currentTicketId: null, outputsProduced: settled.status === "COMPLETED" ? a.outputsProduced + 1 : a.outputsProduced }));
+      return { ...next, agents };
+    }
+
+    case "AUDIT_COMPLETE": {
+      const request = data.websiteAuditRequests.find((r) => r.id === action.requestId);
+      if (!request) return data;
+      const now = nowIso();
+      const findings = action.findings.map((f) => ({ ...f, createdAt: f.createdAt ?? now }));
+      let next: OSData = { ...data, auditFindings: [...data.auditFindings, ...findings] };
+      const created = createArtifact(next, {
+        projectId: auditProjectId(request),
+        type: "website_audit_report",
+        title: `Audit report — ${hostOf(request.targetUrl)}`,
+        createdByAgentId: null,
+        status: "FINAL",
+        summary: action.summary,
+        content: action.reportContent,
+      });
+      next = _updateAuditRequest(created.data, action.requestId, { status: action.status, resultArtifactId: created.artifact.id, failureReason: action.status === "NEEDS_A_HAND" ? "No specialist agent completed — report is heuristic-only. Check provider availability and re-run." : null, progressMessage: `Synthesis complete (${action.status}) — ${action.summary}` });
+      const clientFacing = findings.filter((f) => f.kind !== "RAW").length;
+      return { ...next, activity: pushActivity(next, request.projectId, "ARTIFACT", `Audit ${action.status.toLowerCase().replace(/_/g, " ")}: ${request.targetUrl} — ${clientFacing} finding(s)`, undefined, ref(action.actor)) };
+    }
+
+    case "AUDIT_FAILED": {
+      const request = data.websiteAuditRequests.find((r) => r.id === action.requestId);
+      if (!request) return data;
+      let next = data;
+      for (const jobId of request.auditJobIds) {
+        const job = next.agentJobs.find((j) => j.id === jobId);
+        if (job && (job.status === "QUEUED" || job.status === "RUNNING")) next = cancelJob(next, jobId, action.reason).data;
+      }
+      next = _updateAuditRequest(next, action.requestId, { status: "FAILED", failureReason: action.reason, progressMessage: `Failed: ${action.reason}` });
+      return { ...next, activity: pushActivity(next, request.projectId, "NOTE", `Audit failed: ${request.targetUrl} — ${action.reason}`, undefined, ref(action.actor)) };
+    }
+
+    case "AUDIT_REVIEWED":
+      return _updateAuditRequest(data, action.requestId, { reviewedAt: nowIso(), progressMessage: `Reviewed by ${action.actor.displayName}` });
+  }
+}
+
+/** Audit artifacts/jobs are scoped to the project when run from one; otherwise to the request itself. */
+function auditProjectId(request: WebsiteAuditRequest): string {
+  return request.projectId ?? request.id;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+function agentShortCode(data: OSData, agentId: string): string {
+  const a = data.agents.find((x) => x.id === agentId);
+  return a ? `A${a.shortCode}` : agentId;
+}
+
+/** Public-site capture runs server-side (SSRF-checked, bounded) and returns page digests, never raw HTML. */
+async function captureViaServer(targetUrl: string): Promise<CaptureResult> {
+  try {
+    const res = await fetch("/site-capture", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: targetUrl }) });
+    const body = (await res.json().catch(() => null)) as { ok: boolean; capture?: SiteCapture; error?: string; reason?: string } | null;
+    if (!body) return { ok: false, error: `Capture endpoint returned HTTP ${res.status}` };
+    if (!body.ok || !body.capture || !body.capture.pages.length) return { ok: false, error: body.error ?? body.reason ?? "No pages captured" };
+    return { ok: true, capture: body.capture };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -614,6 +779,10 @@ interface OSStoreValue {
     setExternalClientStatus: (clientId: string, status: "ACTIVE" | "DISABLED") => void;
     rotateExternalClientToken: (clientId: string) => { rawToken: string };
     revokeExternalClient: (clientId: string) => void;
+    // CTOS-007A: Website Audit Engine
+    /** Creates the request and runs capture → A01 → A02 → A03‖A04 → A06 → synthesis as canonical AgentJobs. Resolves when the audit is settled. */
+    startAudit: (targetUrl: string, auditType: "PUBLIC_PROSPECT" | "CLIENT_DEEP_AUDIT", projectId?: string | null) => Promise<{ ok: true; requestId: string } | { ok: false; reason: string }>;
+    markAuditReviewed: (requestId: string) => void;
   };
 }
 
@@ -702,6 +871,10 @@ function OSStoreInner({ children, repository, initial, reason, user, gateway }: 
   userRef.current = user;
 
   const gatewayClient = React.useMemo<GatewayClient>(() => gateway ?? new EmbeddedGatewayClient({ getData: () => dataRef.current, getUser: () => userRef.current }), [gateway]);
+  // Audit jobs need live providers. In Supabase mode that is the same HTTP gateway; in local dev the
+  // Vite middleware serves the local gateway (CTOS_LOCAL_NO_SUPABASE=1) with the job truth posted
+  // alongside. Production builds without Supabase keep the embedded stub gateway, labelled as such.
+  const auditGateway = React.useMemo<GatewayClient>(() => (gateway ? gateway : import.meta.env.DEV ? new HttpGatewayClient("/agent-execute", async () => "local-session") : gatewayClient), [gateway, gatewayClient]);
 
   React.useEffect(() => {
     let active = true;
@@ -778,8 +951,36 @@ function OSStoreInner({ children, repository, initial, reason, user, gateway }: 
         return { rawToken };
       },
       revokeExternalClient: (clientId) => dispatch({ type: "REVOKE_EXTERNAL_CLIENT", clientId, actor: actor() }),
+      // CTOS-007A: Website Audit Engine
+      startAudit: async (targetUrl, auditType, projectId) => {
+        const user = actor();
+        const requestId = newId("audit");
+        // Async orchestration cannot read dataRef (it only updates on render): keep a local snapshot
+        // advanced through the same reducer, exactly as runTicket plans on its own snapshot.
+        let snapshot = reducer(dataRef.current, { type: "CREATE_AUDIT_REQUEST", requestId, targetUrl, auditType, projectId, actor: user });
+        dispatch({ type: "CREATE_AUDIT_REQUEST", requestId, targetUrl, auditType, projectId, actor: user });
+        if (!snapshot.websiteAuditRequests.some((r) => r.id === requestId)) return { ok: false, reason: "URL rejected: only public http(s) domains can be audited." };
+        const apply = (action: Action) => {
+          snapshot = reducer(snapshot, action);
+          dispatch(action);
+          return snapshot;
+        };
+        await runAuditPipeline({
+          requestId,
+          user,
+          apply,
+          snapshot: () => snapshot,
+          gateway: auditGateway,
+          fallbackGateway: auditGateway === gatewayClient ? undefined : gatewayClient,
+          capture: captureViaServer,
+          persist: gatewayClient.kind === "http" && gatewayClient === auditGateway ? async (d) => { await repository.persist(d); } : undefined,
+          newId,
+        });
+        return { ok: true, requestId };
+      },
+      markAuditReviewed: (requestId) => dispatch({ type: "AUDIT_REVIEWED", requestId, actor: actor() }),
     };
-  }, [gatewayClient, repository]);
+  }, [gatewayClient, auditGateway, repository]);
 
   const status = React.useMemo<StoreStatus>(
     () => ({ repositoryKind: repository.kind, description: repository.describe?.() ?? repository.kind, reason, persistError, gatewayKind: gatewayClient.kind }),

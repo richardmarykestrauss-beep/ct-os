@@ -6,6 +6,7 @@
  * Items are ordered by urgency: CRITICAL > HIGH > MEDIUM > LOW.
  */
 import type { OSData } from "@/data/types";
+import { isAuditJob } from "./website-audit";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,7 +29,10 @@ export type AttentionKind =
   | "wp_change_plan_approval"
   | "wp_write_conflict"
   | "wp_write_failed"
-  | "wp_site_offline";
+  | "wp_site_offline"
+  // CTOS-007: Website Audit Engine
+  | "audit_failed"
+  | "audit_complete";
 
 export interface AttentionItem {
   id: string;
@@ -55,8 +59,8 @@ const URGENCY_ORDER: Record<AttentionUrgency, number> = { CRITICAL: 0, HIGH: 1, 
 export function deriveAttentionQueue(data: OSData): AttentionItem[] {
   const items: AttentionItem[] = [];
 
-  // 1. NEEDS_A_HAND jobs — highest urgency: execution is blocked
-  for (const job of data.agentJobs.filter((j) => j.status === "NEEDS_A_HAND")) {
+  // 1. NEEDS_A_HAND jobs — highest urgency: execution is blocked. Audit jobs surface via their request (16).
+  for (const job of data.agentJobs.filter((j) => j.status === "NEEDS_A_HAND" && !isAuditJob(data, j))) {
     items.push({
       id: `nah-${job.id}`,
       kind: "needs_a_hand",
@@ -323,6 +327,37 @@ export function deriveAttentionQueue(data: OSData): AttentionItem[] {
       requiredActor: "operator",
       linkHint: `/projects/${conn.projectId}/site-connection/${conn.id}`,
       sourceIds: [conn.id],
+    });
+  }
+
+  // 16. CTOS-007A: audits that did not fully complete (FAILED / NEEDS_A_HAND / PARTIAL) until reviewed
+  for (const req of (data.websiteAuditRequests ?? []).filter((r) => r.reviewedAt === null && (r.status === "FAILED" || r.status === "NEEDS_A_HAND" || r.status === "PARTIAL"))) {
+    const failedJobs = data.agentJobs.filter((j) => req.auditJobIds.includes(j.id) && j.status !== "COMPLETED");
+    items.push({
+      id: `audit-failed-${req.id}`,
+      kind: "audit_failed",
+      urgency: req.status === "PARTIAL" ? "MEDIUM" : "HIGH",
+      projectId: req.projectId,
+      title: `Website audit ${req.status.toLowerCase().replace(/_/g, " ")}: ${req.targetUrl}`,
+      detail: req.failureReason ?? (failedJobs.length ? `${failedJobs.length} specialist job(s) did not complete: ${failedJobs.map((j) => `${j.agentId} ${j.status}`).join(", ")}.` : "Audit did not fully complete — see request details."),
+      requiredActor: "operator",
+      linkHint: req.projectId ? `/projects/${req.projectId}?tab=audit` : `/audit/${req.id}`,
+      sourceIds: [req.id, ...failedJobs.map((j) => j.id)],
+    });
+  }
+
+  // 17. CTOS-007A: completed audits awaiting operator review
+  for (const req of (data.websiteAuditRequests ?? []).filter((r) => r.status === "COMPLETE" && r.resultArtifactId && r.reviewedAt === null)) {
+    items.push({
+      id: `audit-complete-${req.id}`,
+      kind: "audit_complete",
+      urgency: "LOW",
+      projectId: req.projectId,
+      title: `Audit complete: ${req.targetUrl}`,
+      detail: "Website audit results are ready for review.",
+      requiredActor: "operator",
+      linkHint: req.projectId ? `/projects/${req.projectId}?tab=audit` : `/audit/${req.id}`,
+      sourceIds: [req.id],
     });
   }
 

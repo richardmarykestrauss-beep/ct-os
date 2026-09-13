@@ -9,6 +9,7 @@
  *   - COMPLETE: project is in a terminal state
  */
 import type { AgentCode, OSData, ProjectState } from "@/data/types";
+import { isAuditJob } from "./website-audit";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,8 +53,9 @@ export function resolveNextStep(data: OSData, projectId: string): NextStep {
 
   // Cross-cutting blockers checked before state-specific logic
 
-  // NEEDS_A_HAND jobs always block
-  const needsHandJobs = data.agentJobs.filter((j) => j.projectId === projectId && j.status === "NEEDS_A_HAND");
+  // NEEDS_A_HAND production jobs always block. Audit jobs are a separate execution context (CTOS-007A):
+  // they surface through the audit request below and never block the production pipeline.
+  const needsHandJobs = data.agentJobs.filter((j) => j.projectId === projectId && j.status === "NEEDS_A_HAND" && !isAuditJob(data, j));
   if (needsHandJobs.length > 0) {
     const job = needsHandJobs[0]!;
     return blocked(
@@ -77,6 +79,12 @@ export function resolveNextStep(data: OSData, projectId: string): NextStep {
       "Workflow paused at approval gate.",
       state,
     );
+  }
+
+  // A settled, unreviewed website audit asks the operator to read it (does not mutate the pipeline)
+  const unreviewedAudit = (data.websiteAuditRequests ?? []).find((r) => r.projectId === projectId && r.reviewedAt === null && (r.status === "COMPLETE" || r.status === "PARTIAL" || r.status === "NEEDS_A_HAND" || r.status === "FAILED"));
+  if (unreviewedAudit) {
+    return human(`Review audit findings for ${unreviewedAudit.targetUrl} (${unreviewedAudit.status.toLowerCase().replace(/_/g, " ")}).`, null, state);
   }
 
   // Build-pack conflicts block READY_TO_BUILD

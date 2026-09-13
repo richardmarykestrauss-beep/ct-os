@@ -37,8 +37,9 @@ import { PROVIDER_LABELS } from "@/ai/registry";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Eye, FlaskConical, Play, ShieldCheck, ThumbsUp } from "lucide-react";
 import { VisualReviewStatusPanel } from "@/components/os/VisualReviewStatus";
 import { WriteEngineStatusPanel } from "@/components/os/WriteEngineStatus";
+import { AuditTab } from "@/components/os/AuditTab";
 
-type Tab = "overview" | "pages" | "tickets" | "agents" | "artifacts" | "runs" | "qa" | "approvals" | "activity";
+type Tab = "overview" | "pages" | "tickets" | "agents" | "artifacts" | "runs" | "qa" | "approvals" | "activity" | "audit";
 
 export const Route = createFileRoute("/projects/$projectId")({
   component: ProjectDetail,
@@ -201,6 +202,7 @@ function ProjectDetail() {
             Approvals {approvals.filter((a) => a.status === "PENDING").length ? <Count n={approvals.filter((a) => a.status === "PENDING").length} tone="warn" /> : null}
           </TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
         </TabsList>
 
         {/* ------------------------------------------------------------ OVERVIEW */}
@@ -687,6 +689,14 @@ function ProjectDetail() {
           <Card>
             <CardContent>
               <ActivityTimeline events={activity} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <Card>
+            <CardContent className="pt-4">
+              <AuditTab projectId={projectId} />
             </CardContent>
           </Card>
         </TabsContent>

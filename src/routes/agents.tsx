@@ -45,6 +45,9 @@ function AgentsPage() {
         {data.agents.map((a) => {
           const project = a.currentProjectId ? data.projects.find((p) => p.id === a.currentProjectId) : null;
           const ticket = a.currentTicketId ? data.tickets.find((t) => t.id === a.currentTicketId) : null;
+          // Audit jobs have no ticket: show the running job's audit request as the current task.
+          const runningJob = !ticket ? data.agentJobs.find((j) => j.agentId === a.id && j.status === "RUNNING") : null;
+          const auditRequest = runningJob ? data.websiteAuditRequests.find((r) => r.auditJobIds.includes(runningJob.id)) : null;
           const isOrch = a.code === "ORCH";
           const lastRun = [...data.agentRuns].reverse().find((r) => r.agentId === a.id && r.status === "SUCCEEDED");
           const fallback = a.providerPolicy.fallbacks[0] ?? null;
@@ -76,6 +79,10 @@ function AgentsPage() {
                   {ticket ? (
                     <span>
                       <span className="font-mono text-[11px] text-muted">{ticket.code}</span> {ticket.title}
+                    </span>
+                  ) : auditRequest && runningJob ? (
+                    <span>
+                      <span className="font-mono text-[11px] text-muted">AUDIT</span> {auditRequest.targetUrl} · {runningJob.taskType.replace(/_/g, " ")} · preferred {PROVIDER_LABELS[runningJob.preferredProvider]}
                     </span>
                   ) : isOrch && a.status === "WAITING_APPROVAL" ? (
                     <span>Awaiting human launch decision</span>

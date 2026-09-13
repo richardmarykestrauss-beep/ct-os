@@ -13,9 +13,23 @@ import { createBrowserRegistry, type ProviderRegistry } from "@/ai/registry";
 import { handleExecute, handleHealth, type GatewayFailure, type GatewayResponse, type HealthResponse } from "./core";
 import { OSDataGatewayStore } from "./store";
 
+/**
+ * Job truth handed to a gateway that has no server-side store of its own (local dev mode).
+ * The Supabase gateway ignores it — it always reads the database. Contains no secrets.
+ */
+export interface ExecutionContext {
+  data: OSData;
+  user: AuthUser;
+}
+
+export interface ExecuteOptions {
+  artifactTitle?: string;
+  context?: ExecutionContext;
+}
+
 export interface GatewayClient {
   readonly kind: "http" | "embedded";
-  execute(jobId: string, opts?: { artifactTitle?: string }): Promise<GatewayResponse>;
+  execute(jobId: string, opts?: ExecuteOptions): Promise<GatewayResponse>;
   health(): Promise<HealthResponse | GatewayFailure>;
 }
 
@@ -30,9 +44,9 @@ export class HttpGatewayClient implements GatewayClient {
     const token = await this.getToken();
     return { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) };
   }
-  async execute(jobId: string, opts: { artifactTitle?: string } = {}): Promise<GatewayResponse> {
+  async execute(jobId: string, opts: ExecuteOptions = {}): Promise<GatewayResponse> {
     try {
-      const res = await this.fetchImpl(this.baseUrl, { method: "POST", headers: await this.headers(), body: JSON.stringify({ jobId, artifactTitle: opts.artifactTitle }) });
+      const res = await this.fetchImpl(this.baseUrl, { method: "POST", headers: await this.headers(), body: JSON.stringify({ jobId, artifactTitle: opts.artifactTitle, context: opts.context }) });
       const body = (await res.json().catch(() => null)) as GatewayResponse | null;
       if (body && typeof body === "object" && "ok" in body) return body;
       return { ok: false, code: "internal", message: `Gateway returned ${res.status}`, status: res.status };
@@ -64,17 +78,18 @@ export class EmbeddedGatewayClient implements GatewayClient {
   constructor(private readonly opts: EmbeddedGatewayOptions) {
     this.router = opts.router ?? new ModelRouter({ registry: opts.registry ?? createBrowserRegistry() });
   }
-  private deps() {
-    const user = this.opts.getUser();
+  private deps(context?: ExecutionContext) {
+    const user = context?.user ?? this.opts.getUser();
     return {
       auth: { verify: async (token: string | null) => (token === "local-session" && user ? user : null) },
-      store: new OSDataGatewayStore(this.opts.getData(), user ? { [user.id]: user.role } : {}),
+      store: new OSDataGatewayStore(context?.data ?? this.opts.getData(), user ? { [user.id]: user.role } : {}),
       router: this.router,
       mode: "local" as const,
     };
   }
-  execute(jobId: string, opts: { artifactTitle?: string } = {}) {
-    return handleExecute({ token: this.opts.getUser() ? "local-session" : null, jobId, artifactTitle: opts.artifactTitle }, this.deps());
+  execute(jobId: string, opts: ExecuteOptions = {}) {
+    const user = opts.context?.user ?? this.opts.getUser();
+    return handleExecute({ token: user ? "local-session" : null, jobId, artifactTitle: opts.artifactTitle }, this.deps(opts.context));
   }
   health() {
     return handleHealth({ token: this.opts.getUser() ? "local-session" : null }, this.deps());

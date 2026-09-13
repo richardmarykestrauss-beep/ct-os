@@ -29,6 +29,13 @@ export const ARTIFACT_TYPES: ArtifactTypeDef[] = [
   { type: "client_feedback", label: "Client Feedback", schemaVersion: 1, description: "Structured client feedback captured against pages or artifacts." },
   { type: "deployment_report", label: "Deployment Report", schemaVersion: 1, description: "Backups, migration steps, activation results and rollback state." },
   { type: "lesson_candidate", label: "Lesson Candidate", schemaVersion: 1, description: "Proposed lessons with evidence, for human review in Knowledge." },
+  { type: "website_audit_report", label: "Website Audit Report", schemaVersion: 1, description: "Public-prospect or deep-audit findings across Traffic, Message, Trust, Conversion and Follow-up." },
+  { type: "audit_capture", label: "Audit Capture", schemaVersion: 1, description: "Public-site capture evidence: per-page digests (title, headings, links, CTAs, forms, scripts) — never raw HTML." },
+  { type: "audit_discovery", label: "Audit Discovery", schemaVersion: 1, description: "A01 discovery: business type, audience signals, site structure and technical signals." },
+  { type: "audit_architecture", label: "Audit Architecture", schemaVersion: 1, description: "A02 UX/IA analysis: navigation, information architecture and UX findings." },
+  { type: "audit_creative", label: "Audit Creative", schemaVersion: 1, description: "A03 creative analysis: visual observations and creative findings (structural only when screenshots unavailable)." },
+  { type: "audit_content_analysis", label: "Audit Content Analysis", schemaVersion: 1, description: "A04 content analysis: messaging, SEO signals and content findings." },
+  { type: "audit_qa_review", label: "Audit QA Review", schemaVersion: 1, description: "A06 QA review: challenged and confirmed findings plus quality score." },
   { type: "other", label: "Other", schemaVersion: 1, description: "Anything that does not fit a defined type." },
 ];
 

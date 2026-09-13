@@ -52,7 +52,10 @@ export type TableName =
   | "website_revision_snapshots"
   | "website_write_results"
   | "wp_write_audit_log"
-  | "wp_idempotency_log";
+  | "wp_idempotency_log"
+  // CTOS-007: Website Audit Engine
+  | "website_audit_requests"
+  | "audit_findings";
 
 export interface TableSpec {
   table: TableName;
@@ -112,6 +115,9 @@ export const TABLES: TableSpec[] = [
   { table: "website_write_results", key: "websiteWriteResults", nullable: ["beforeSnapshotId", "afterStateHash", "startedAt", "completedAt", "actorId", "actorName", "rollbackStatus"] },
   { table: "wp_write_audit_log", key: "wpWriteAuditLog", nullable: ["changePlanId", "writeResultId", "requestedById", "requestedByName", "approvalId", "beforeSnapshotId", "result", "verificationPassed"] },
   { table: "wp_idempotency_log", key: "wpIdempotencyLog", nullable: [] },
+  // CTOS-007: Website Audit Engine
+  { table: "website_audit_requests", key: "websiteAuditRequests", nullable: ["projectId", "resultArtifactId", "failureReason", "reviewedAt", "requestedById", "requestedByName", "createdAt", "updatedAt"] },
+  { table: "audit_findings", key: "auditFindings", nullable: ["projectId", "agentId", "businessImpact", "affectedUrl", "estimatedEffort", "recommendation", "serviceOpportunity", "createdAt"] },
 ];
 
 export function toSnake(key: string): string {

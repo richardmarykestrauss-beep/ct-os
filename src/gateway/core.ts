@@ -240,6 +240,8 @@ export const EMPTY: OSData = {
   visualReferences: [], signatureVisualElements: [], sectionLibrary: [], designTokenSets: [], visualDefects: [], designContentReconciliations: [],
   // CTOS-006: WordPress Write Engine
   wpSiteConnections: [], websiteChangePlans: [], websiteRevisionSnapshots: [], websiteWriteResults: [], wpWriteAuditLog: [], wpIdempotencyLog: [],
+  // CTOS-007: Website Audit Engine
+  websiteAuditRequests: [], auditFindings: [],
 };
 
 function baseLog(ctx: JobContext, newId: (p: string) => string, at: string, user: AuthUser, permission: PermissionCheck, patch: Partial<ExecutionLog>): ExecutionLog {

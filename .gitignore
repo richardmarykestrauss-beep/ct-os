@@ -6,3 +6,24 @@ dist
 .env.local
 .env.*.local
 supabase/functions/agent-execute/dist
+
+# Vercel CLI: local project link + pulled env vars (never commit a pulled .env)
+.vercel
+
+# Supabase CLI: local cache/link state
+supabase/.temp
+
+# Generated logs, backups, archives — never intentionally committed
+*.log
+*.log.txt
+*.bak
+*.tmp
+*.zip
+*.tgz
+*~
+benchmark-runs/
+
+# Local sqlite/db dumps if a repository or test ever writes one to disk
+*.sqlite
+*.sqlite3
+*.db

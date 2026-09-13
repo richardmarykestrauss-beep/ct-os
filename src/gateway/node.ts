@@ -5,10 +5,12 @@
  * Vite can never inline them into the browser bundle) and serves the same core the Edge Function runs.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AuthUser, OSData } from "@/data/types";
 import { createServerRegistry, type ServerEnv } from "@/ai/registry";
 import { ModelRouter } from "@/ai/router";
-import type { GatewayDeps } from "./core";
+import { EMPTY, type GatewayDeps } from "./core";
 import { handleGatewayHttp } from "./http";
+import { OSDataGatewayStore } from "./store";
 import { SupabaseGatewayAuth, SupabaseGatewayStore, supabaseAuthApi, supabaseDb, type SupabaseServiceClientLike } from "./supabase";
 
 export interface NodeGatewayConfig {
@@ -70,6 +72,46 @@ export function createNodeGatewayHandler(config: NodeGatewayConfig) {
   };
 }
 
+/**
+ * Local-mode gateway (CTOS-007A). Enabled only when `CTOS_LOCAL_NO_SUPABASE=1` and Supabase is NOT
+ * configured. There is no server-side job store, so the browser posts the job truth it holds
+ * (`context: { data, user }`) and the same gateway core runs it against the live server registry.
+ * Everything else — permission enforcement, ModelRouter fallback, validation, runs, execution logs —
+ * is identical to the Supabase path. Dev middleware only; never bundled for the browser.
+ */
+export function localGatewayEnabled(env: ServerEnv): boolean {
+  return (env.CTOS_LOCAL_NO_SUPABASE === "1" || env.CTOS_LOCAL_NO_SUPABASE === "true") && gatewayConfigProblem(env) !== null;
+}
+
+const LOCAL_MAX_BODY = 4 * 1024 * 1024;
+
+export function createLocalGatewayHandler(config: NodeGatewayConfig) {
+  const router = new ModelRouter({ registry: createServerRegistry(config.env) });
+  const log = config.log ?? ((e) => console.log("[ctos-gateway:local]", JSON.stringify(e)));
+  return async (req: IncomingMessage, res: ServerResponse) => {
+    const send = (status: number, headers: Record<string, string>, body: unknown) => {
+      res.writeHead(status, headers);
+      res.end(body === null || body === undefined ? undefined : JSON.stringify(body));
+    };
+    const body = req.method === "POST" ? ((await readJson(req, LOCAL_MAX_BODY)) as { context?: { data?: OSData; user?: AuthUser } } | null) : null;
+    const context = body?.context;
+    const user = context?.user && typeof context.user.id === "string" ? context.user : null;
+    const isHealth = req.method === "GET" && (req.url ?? "").includes("/health");
+    if (!isHealth && (!context?.data || !user)) {
+      return send(400, { "content-type": "application/json" }, { ok: false, code: "bad_request", message: "Local gateway needs { jobId, context: { data, user } }", status: 400 });
+    }
+    const deps: GatewayDeps = {
+      auth: { verify: async (token) => (token === "local-session" ? (user ?? { id: "local", email: null, displayName: "Local", role: "ADMIN" }) : null) },
+      store: new OSDataGatewayStore(context?.data ?? EMPTY, user ? { [user.id]: user.role } : {}),
+      router,
+      mode: "local",
+      log,
+    };
+    const out = await handleGatewayHttp({ method: req.method ?? "GET", path: req.url ?? "/", headers: { ...lowerHeaders(req.headers), authorization: "Bearer local-session" }, body }, deps);
+    send(out.status, out.headers, out.body);
+  };
+}
+
 function lowerHeaders(h: IncomingMessage["headers"]): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(h)) out[k.toLowerCase()] = Array.isArray(v) ? v[0] : v;
@@ -78,11 +120,11 @@ function lowerHeaders(h: IncomingMessage["headers"]): Record<string, string | un
 
 const MAX_BODY = 64 * 1024;
 
-function readJson(req: IncomingMessage): Promise<unknown> {
+function readJson(req: IncomingMessage, maxBody = MAX_BODY): Promise<unknown> {
   return new Promise((resolve) => {
     let raw = "";
     req.on("data", (c: Buffer | string) => {
-      if (raw.length < MAX_BODY) raw += c.toString().slice(0, MAX_BODY - raw.length);
+      if (raw.length < maxBody) raw += c.toString().slice(0, maxBody - raw.length);
     });
     req.on("end", () => {
       try {

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "functions": {
+    "api/**/*.ts": { "runtime": "nodejs20.x" }
+  },
+  "rewrites": [
+    { "source": "/agent-execute/health", "destination": "/api/agent-execute/health" },
+    { "source": "/agent-execute", "destination": "/api/agent-execute" },
+    { "source": "/site-capture", "destination": "/api/site-capture" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

@@ -2,8 +2,13 @@
  * SupabaseRepository — persistent implementation of OSRepository.
  *
  * Design:
- *  - `load()` reads every table and assembles OSData. If the database is empty (no projects),
- *    it returns the seed so U-Proof stays usable; the first `persist()` then writes it.
+ *  - `load()` reads every table and assembles OSData. If the database is empty (no projects), it
+ *    returns the CLEAN bootstrap seed (agent roster, gates, doctrine, skills, integrations — no
+ *    demo client/project/audit data; see `productionBootstrapData` in data/seed.ts) so a brand-new
+ *    production database becomes usable without also acquiring a fake U-Proof project and fake
+ *    audit history. The first `persist()` then writes that bootstrap data. Pass `seed: seedData`
+ *    explicitly (tests, a deliberate local demo against a real Supabase project) to get the full
+ *    U-Proof demo instead — the default never does this on its own.
  *  - `persist(data)` diffs the snapshot against the last known database state and only upserts
  *    changed/new rows (and deletes removed ids). Writes are serialised and coalesced so bursts
  *    of reducer actions become one round of writes.
@@ -11,7 +16,7 @@
  *    client and a test fake are interchangeable. No other module imports the SDK.
  */
 import type { OSData } from "@/data/types";
-import { seedData } from "@/data/seed";
+import { productionBootstrapData } from "@/data/seed";
 import type { OSRepository } from "../repository";
 import { TABLES, fromRow, toRow, type Row, type TableName, type TableSpec } from "./mapping";
 
@@ -31,7 +36,7 @@ export interface SupabaseClientLike {
 
 export interface SupabaseRepositoryOptions {
   client: SupabaseClientLike;
-  /** Seed to bootstrap an empty database. Defaults to the U-Proof seed. */
+  /** Seed to bootstrap an empty database. Defaults to the clean production bootstrap (no demo data) — pass `seedData` to get the U-Proof demo instead. */
   seed?: OSData;
   /** Chunk size for upserts. */
   batchSize?: number;
@@ -60,7 +65,7 @@ export class SupabaseRepository implements OSRepository {
 
   constructor(opts: SupabaseRepositoryOptions) {
     this.client = opts.client;
-    this.seed = opts.seed ?? seedData;
+    this.seed = opts.seed ?? productionBootstrapData;
     this.batchSize = opts.batchSize ?? 200;
     this.onPersist = opts.onPersist;
   }
@@ -81,8 +86,15 @@ export class SupabaseRepository implements OSRepository {
     }
     this.known = known;
     const loaded = data as unknown as OSData;
-    if (loaded.projects.length === 0) {
-      // Empty database: bootstrap from seed. `known` stays empty so persist() writes everything.
+    // "Empty" = every table came back with zero rows. Checking `projects.length === 0` alone broke
+    // once the default bootstrap (CTOS-008B) stopped seeding a demo project: a clean bootstrap that
+    // had already been persisted (9 agents, 0 projects) would look identical to a never-bootstrapped
+    // database and re-bootstrap forever. Any table with a row — agents, gates, skills included —
+    // proves this database has already been through load()+persist() once.
+    const isEmpty = Object.values(loaded).every((rows) => Array.isArray(rows) && rows.length === 0);
+    if (isEmpty) {
+      // Empty database: bootstrap from `this.seed` (clean production data by default — see the
+      // class docstring). `known` stays empty so persist() writes everything.
       this.bootstrapped = true;
       return structuredClone(this.seed);
     }

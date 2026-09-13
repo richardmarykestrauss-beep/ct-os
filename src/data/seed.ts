@@ -1049,4 +1049,38 @@ export const seedData: OSData = {
   websiteWriteResults: [],
   wpWriteAuditLog: [],
   wpIdempotencyLog: [],
+  // CTOS-007
+  websiteAuditRequests: [],
+  auditFindings: [],
+};
+
+/**
+ * Clean production bootstrap (CTOS-008B) — what a brand-new, empty Supabase database should start
+ * with. Keeps the system/reference data every project needs to function: the agent roster, workflow
+ * gates, institutional DOCTRINE knowledge, the skills/instruction-pack library, the reusable section
+ * library, and the integrations catalog. Excludes every demo/fixture record: no U-Proof client,
+ * project, phase, page, ticket, artifact, QA run/item, launch hold, approval or activity entry, and
+ * no AGENCY-scope lesson candidates (those cite fictional CT-UP-* U-Proof ticket codes as evidence —
+ * fake audit history, not institutional doctrine).
+ *
+ * This is SupabaseRepository's default bootstrap seed (see services/supabase/repository.ts) —
+ * it is what gets written the first time a real production database is empty and persist() runs.
+ * `seedData` above remains the default for InMemoryRepository and stays the seed local dev and
+ * automated tests use when they explicitly want the U-Proof demo.
+ */
+export const productionBootstrapData: OSData = {
+  ...seedData,
+  clients: [],
+  projects: [],
+  phases: [],
+  pages: [],
+  tickets: [],
+  artifacts: [],
+  qaItems: [],
+  qaRuns: [],
+  launchHolds: [],
+  approvals: [],
+  activity: [],
+  knowledgeItems: seedData.knowledgeItems.filter((k) => k.scope === "DOCTRINE"),
+  agentLessons: [],
 };
