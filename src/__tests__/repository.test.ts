@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { productionBootstrapData, seedData } from "@/data/seed";
+import { AGENT_IDS } from "@/data/seed";
+import { ensureSystemReferenceData, productionBootstrapData, seedData } from "@/data/seed";
 import { InMemoryRepository, createRepository } from "@/services/repository";
 import { FakeSupabaseClient, SupabaseRepository, stable } from "@/services/supabase/repository";
 import { TABLES, fromRow, toRow } from "@/services/supabase/mapping";
+import { EMPTY } from "@/gateway/core";
 import type { OSData } from "@/data/types";
 import { createArtifact } from "@/services/artifacts";
+import { createJob } from "@/services/agent-jobs";
 
 describe("repository compatibility", () => {
   it("in-memory repository loads the seed and persists a snapshot for the session", () => {
@@ -139,6 +142,84 @@ describe("repository compatibility", () => {
     const sb = await createRepository({ VITE_SUPABASE_URL: "https://example.supabase.co", VITE_SUPABASE_ANON_KEY: "anon" });
     expect(sb.repository.kind).toBe("supabase");
     expect(sb.reason).toContain("example.supabase.co");
+  });
+});
+
+describe("CTOS-008G: production system reference data bootstrap", () => {
+  const CANONICAL_AGENT_IDS = Object.values(AGENT_IDS);
+
+  it("empty production DB gets every canonical agent (ORCH + A01–A08) and no others", async () => {
+    const repo = new SupabaseRepository({ client: new FakeSupabaseClient() });
+    const loaded = await repo.load();
+    expect(loaded.agents.map((a) => a.id).sort()).toEqual([...CANONICAL_AGENT_IDS].sort());
+    expect(CANONICAL_AGENT_IDS).toHaveLength(9);
+  });
+
+  it("a partially populated DB (real project, zero agents) receives the missing canonical agents on load", async () => {
+    const client = new FakeSupabaseClient();
+    // Simulate exactly the reported production state: a real Imvusa-like project exists, but the
+    // agents table (and other system reference tables) never got written.
+    client.tables.set("projects", new Map([["proj_imvusa", { id: "proj_imvusa", client_id: "c_imvusa", name: "Imvusa", type: "NEW_WEBSITE", platforms: [], platform_summary: "", domain: null, state: "DISCOVERY", status_label: "Discovery", progress: 0, progress_note: null, current_phase: "DISCOVERY", next_action: "Run discovery", primary_goal: null, has_existing_website: false, notes: null, created_at: null, updated_at: null }]]));
+    client.tables.set("clients", new Map([["c_imvusa", { id: "c_imvusa", name: "Imvusa", website_url: null, contact_name: null, contact_email: null, notes: null, created_at: null, updated_at: null }]]));
+
+    const repo = new SupabaseRepository({ client });
+    const loaded = await repo.load();
+    expect(repo.bootstrapped).toBe(false); // NOT treated as a fresh empty database
+    expect(loaded.agents.map((a) => a.id).sort()).toEqual([...CANONICAL_AGENT_IDS].sort());
+    expect(loaded.gates.length).toBe(productionBootstrapData.gates.length);
+    expect(loaded.skills.length).toBe(productionBootstrapData.skills.length);
+    expect(loaded.integrations.length).toBe(productionBootstrapData.integrations.length);
+    expect(loaded.knowledgeItems.every((k) => k.scope === "DOCTRINE")).toBe(true);
+
+    // The real project/client are untouched — same values, not merely "still present".
+    expect(loaded.projects).toEqual([expect.objectContaining({ id: "proj_imvusa", name: "Imvusa" })]);
+    expect(loaded.clients).toEqual([expect.objectContaining({ id: "c_imvusa", name: "Imvusa" })]);
+
+    // Persisting writes exactly the missing rows — real project data is never re-sent as "changed".
+    await repo.persist(loaded);
+    expect(client.tables.get("agents")?.size).toBe(9);
+    expect(client.tables.get("projects")?.get("proj_imvusa")).toBeTruthy();
+  });
+
+  it("ensureSystemReferenceData is idempotent: calling it twice adds nothing the second time", () => {
+    const once = ensureSystemReferenceData(EMPTY);
+    const twice = ensureSystemReferenceData(once);
+    expect(stable(twice)).toBe(stable(once));
+    expect(twice.agents).toHaveLength(9);
+  });
+
+  it("a second startup on an already-healed database creates no duplicates", async () => {
+    const client = new FakeSupabaseClient();
+    const repo1 = new SupabaseRepository({ client });
+    await repo1.persist(await repo1.load()); // first startup: bootstraps and writes agents etc.
+
+    const repo2 = new SupabaseRepository({ client });
+    const reloaded = await repo2.load(); // second startup: DB already has agents
+    expect(reloaded.agents.map((a) => a.id).sort()).toEqual([...CANONICAL_AGENT_IDS].sort());
+    await repo2.persist(reloaded);
+    expect(client.tables.get("agents")?.size).toBe(9); // still exactly 9, no duplicates
+  });
+
+  it("an operator's edit to an existing agent is never overwritten by the ensure step", () => {
+    const edited: OSData = {
+      ...EMPTY,
+      projects: [{ id: "p1" } as OSData["projects"][number]], // makes the DB "non-empty"
+      agents: [{ ...productionBootstrapData.agents.find((a) => a.id === AGENT_IDS.A02)!, permissionLevel: "RED" }],
+    };
+    const ensured = ensureSystemReferenceData(edited);
+    expect(ensured.agents.find((a) => a.id === AGENT_IDS.A02)?.permissionLevel).toBe("RED"); // preserved, not reset
+    expect(ensured.agents).toHaveLength(9); // the other 8 canonical agents were still added
+  });
+
+  it("createJob(agent_01) succeeds once production bootstrap data is loaded — the exact failure the operator hit", async () => {
+    const repo = new SupabaseRepository({ client: new FakeSupabaseClient() });
+    const loaded = await repo.load();
+    const { job } = createJob(loaded, { projectId: "proj_imvusa", agentId: AGENT_IDS.A01, instructions: "Discovery pass" });
+    expect(job.agentId).toBe(AGENT_IDS.A01);
+    expect(job.status).toBe("QUEUED");
+    for (const id of CANONICAL_AGENT_IDS) {
+      expect(() => createJob(loaded, { projectId: "p", agentId: id, instructions: "x" })).not.toThrow();
+    }
   });
 });
 

@@ -9,6 +9,13 @@
  *    audit history. The first `persist()` then writes that bootstrap data. Pass `seed: seedData`
  *    explicitly (tests, a deliberate local demo against a real Supabase project) to get the full
  *    U-Proof demo instead — the default never does this on its own.
+ *  - CTOS-008G: when the database is NOT empty (real project/client data already exists),
+ *    `load()` still runs `ensureSystemReferenceData()` over whatever it read — idempotently
+ *    adding any canonical agent/gate/skill/integration/DOCTRINE row that's missing, without
+ *    touching a row that already exists or any client/project/audit content. This self-heals a
+ *    database where the bootstrap persist was interrupted (e.g. the first user was still
+ *    inactive, pending ADMIN approval) before a real project made the database look "not empty"
+ *    to the check above.
  *  - `persist(data)` diffs the snapshot against the last known database state and only upserts
  *    changed/new rows (and deletes removed ids). Writes are serialised and coalesced so bursts
  *    of reducer actions become one round of writes.
@@ -16,7 +23,7 @@
  *    client and a test fake are interchangeable. No other module imports the SDK.
  */
 import type { OSData } from "@/data/types";
-import { productionBootstrapData } from "@/data/seed";
+import { ensureSystemReferenceData, productionBootstrapData } from "@/data/seed";
 import type { OSRepository } from "../repository";
 import { TABLES, fromRow, toRow, type Row, type TableName, type TableSpec } from "./mapping";
 
@@ -98,7 +105,9 @@ export class SupabaseRepository implements OSRepository {
       this.bootstrapped = true;
       return structuredClone(this.seed);
     }
-    return loaded;
+    // Not empty: self-heal any missing canonical agent/gate/skill/integration/DOCTRINE row (see
+    // the class docstring) without touching existing rows or any client/project/audit content.
+    return ensureSystemReferenceData(loaded);
   }
 
   /** Coalesce: if several persists arrive while one is in flight, only the latest snapshot is written next. */

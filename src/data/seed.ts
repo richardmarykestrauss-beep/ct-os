@@ -1084,3 +1084,44 @@ export const productionBootstrapData: OSData = {
   knowledgeItems: seedData.knowledgeItems.filter((k) => k.scope === "DOCTRINE"),
   agentLessons: [],
 };
+
+/**
+ * System/reference collections a real CT-OS installation always needs — never client/project
+ * instance data. Kept as one list so "what counts as system reference data" has a single
+ * definition shared by `productionBootstrapData` (above) and `ensureSystemReferenceData` (below).
+ */
+const SYSTEM_REFERENCE_KEYS = ["agents", "gates", "skills", "integrations", "sectionLibrary"] as const satisfies readonly (keyof OSData)[];
+
+/**
+ * CTOS-008G: idempotently ensure the canonical agent roster, workflow gates, skills/instruction
+ * packs, integrations catalogue and DOCTRINE knowledge exist in `data`, WITHOUT ever touching
+ * client/project/audit content and WITHOUT overwriting a row that already exists (an operator may
+ * have edited an agent's provider policy or permission tier — that edit is never clobbered; this
+ * only ever *adds* a canonical row whose id is missing).
+ *
+ * Why this exists: a clean production database's very first bootstrap-and-persist cycle can be
+ * interrupted (the first user is created inactive until an ADMIN approves them — see
+ * ctos_handle_new_user in supabase/migrations/0002 — so a persist attempted before that approval
+ * is rejected by RLS; a later persist can also partially fail mid-way through the table list).
+ * Once a real project/client exists, `SupabaseRepository.load()`'s "is this database empty"
+ * check is false, so the one-time bootstrap path never runs again — a database can end up with
+ * real project data but zero agent rows. Calling this on every non-empty `load()` self-heals that
+ * regardless of how it happened, instead of relying on the bootstrap path running exactly once
+ * at exactly the right moment.
+ */
+export function ensureSystemReferenceData(data: OSData): OSData {
+  const mergeMissing = <T extends { id: string }>(existing: T[], canonical: T[]): T[] => {
+    const have = new Set(existing.map((x) => x.id));
+    const missing = canonical.filter((c) => !have.has(c.id));
+    return missing.length ? [...existing, ...missing] : existing;
+  };
+  const next = { ...data } as unknown as Record<string, unknown>;
+  for (const key of SYSTEM_REFERENCE_KEYS) {
+    next[key] = mergeMissing(data[key] as { id: string }[], productionBootstrapData[key] as { id: string }[]);
+  }
+  next.knowledgeItems = mergeMissing(
+    data.knowledgeItems,
+    productionBootstrapData.knowledgeItems.filter((k) => k.scope === "DOCTRINE"),
+  );
+  return next as unknown as OSData;
+}
