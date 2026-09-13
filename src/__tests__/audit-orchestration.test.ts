@@ -290,6 +290,41 @@ describe("audit orchestration — canonical AgentJob path", () => {
     expect(ctx.user).toBe(lead);
   });
 
+  it("CTOS-008L: A06 stuck at QUEUED by a gateway refusal (persistence race) is force-closed to CANCELLED, never left hanging or silently treated as done", async () => {
+    // Reproduces the production bug: the gateway refuses with a non-transport error (here "not_found",
+    // exactly what handleExecute returns when it can't find the job server-side — a persistence race
+    // between the client's optimistic RUNNING transition and the server read). APPLY_EXECUTION resets
+    // the job back to QUEUED without ever recording a terminal outcome.
+    const notFoundForA06: GatewayClient = {
+      kind: "http",
+      async execute(jobId, opts) {
+        const job = opts!.context!.data.agentJobs.find((j) => j.id === jobId)!;
+        if (job.agentId === AGENT_IDS.A06) return { ok: false, code: "not_found", message: "Job not found", status: 404 };
+        return embedded().execute(jobId, opts);
+      },
+      async health() { return { ok: false, code: "internal", message: "n/a", status: 500 }; },
+    };
+    const h = harness(base(), notFoundForA06);
+    const summary = await h.run();
+    const d = h.data;
+    const a06 = jobOf(d, AGENT_IDS.A06);
+
+    // Never left QUEUED/RUNNING: forced to a real terminal state with the reason recorded.
+    expect(a06.status).toBe("CANCELLED");
+    expect(a06.error).toMatch(/did not reach a terminal state/);
+
+    // Synthesis only ran once A06 was terminal, and reports PARTIAL — never COMPLETE, never hanging.
+    expect(summary.status).toBe("PARTIAL");
+    expect(request(d).status).toBe("PARTIAL");
+    const content = d.artifacts.find((a) => a.id === request(d).resultArtifactId)!.content as { completionStatus: string; agentOutcomes: Array<{ agentId: string; status: string }>; evidenceGaps: string[] };
+    expect(content.completionStatus).toBe("PARTIAL");
+    expect(content.agentOutcomes.find((o) => o.agentId === AGENT_IDS.A06)?.status).toBe("CANCELLED");
+    expect(content.evidenceGaps.join(" ")).toMatch(/agent_06 did not complete \(CANCELLED\)/);
+
+    // A02/A03/A04 findings still made it into the report — QA not completing degrades, never blocks, synthesis.
+    expect(d.auditFindings.some((f) => f.agentId === AGENT_IDS.A04)).toBe(true);
+  });
+
   it("phase definitions: five specialists, A06 last, A05/A07/A08 never involved", () => {
     expect(AUDIT_PHASES.map((p) => p.agentId)).toEqual([AGENT_IDS.A01, AGENT_IDS.A02, AGENT_IDS.A03, AGENT_IDS.A04, AGENT_IDS.A06]);
     expect(AUDIT_PHASES.find((p) => p.phase === "A03")!.instructions).toMatch(/VISUAL_NOT_VERIFIED/);

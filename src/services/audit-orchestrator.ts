@@ -160,6 +160,23 @@ export async function runAuditPipeline(deps: AuditOrchestratorDeps): Promise<Aud
     return job?.status === "COMPLETED" ? job.outputArtifactId : null;
   };
 
+  // CTOS-008L: a phase's job must reach one of these before the pipeline moves past it — QUEUED and
+  // RUNNING are never acceptable states to hand off to the next phase or to synthesis. A gateway
+  // refusal (e.g. a persistence race where the job wasn't yet visible server-side when the gateway
+  // read it) resets the job to QUEUED in the APPLY_EXECUTION reducer without ever recording a
+  // terminal outcome — that is exactly how A06 was observed stuck at QUEUED while synthesis still
+  // ran to PARTIAL in production. NEEDS_A_HAND is its own legitimate, explicitly-recorded halt state
+  // (surfaced on the attention queue, eligible for Mode B/C hand-off) and counts as terminal here too;
+  // a lingering WAITING_APPROVAL (approveJobOutput threw during settle) does not and gets force-closed
+  // the same way QUEUED/RUNNING does.
+  const TERMINAL_JOB_STATUSES = new Set(["COMPLETED", "FAILED", "CANCELLED", "NEEDS_A_HAND"]);
+  const forceTerminalIfStuck = (phase: AuditPhase, jobId: string, reason: string): void => {
+    const job = deps.snapshot().agentJobs.find((j) => j.id === jobId);
+    if (job && !TERMINAL_JOB_STATUSES.has(job.status)) {
+      apply({ type: "CANCEL_JOB", jobId, reason: `${phase} ${reason} — treated as failed so it can never silently pass as complete or block synthesis.`, actor: user });
+    }
+  };
+
   const runPhase = async (phase: AuditPhase, upstream: AuditPhase[]): Promise<void> => {
     const def = AUDIT_PHASES.find((p) => p.phase === phase)!;
     const jobId = jobIds[phase];
@@ -168,6 +185,7 @@ export async function runAuditPipeline(deps: AuditOrchestratorDeps): Promise<Aud
     const job = data.agentJobs.find((j) => j.id === jobId);
     if (!job || job.status !== "RUNNING") {
       apply({ type: "AUDIT_UPDATE", requestId, patch: { progressMessage: `${phase} could not start (${job?.status ?? "missing"})` }, actor: user });
+      forceTerminalIfStuck(phase, jobId, `never started (stuck at ${job?.status ?? "missing"})`);
       return;
     }
     if (deps.persist) {
@@ -183,6 +201,8 @@ export async function runAuditPipeline(deps: AuditOrchestratorDeps): Promise<Aud
     }
     apply({ type: "APPLY_EXECUTION", jobId, response, actor: user });
     apply({ type: "AUDIT_JOB_SETTLE", jobId, requestId, actor: user });
+    const settledStatus = deps.snapshot().agentJobs.find((j) => j.id === jobId)?.status ?? "missing";
+    forceTerminalIfStuck(phase, jobId, `did not reach a terminal state after execution (stuck at ${settledStatus})`);
   };
 
   apply({ type: "AUDIT_UPDATE", requestId, patch: { status: "RUNNING", progressMessage: `Captured ${capture.pages.length} page(s). Specialist agents queued: A01 → A02 → A03 ‖ A04 → A06.` }, actor: user });
