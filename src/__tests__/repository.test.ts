@@ -223,6 +223,75 @@ describe("CTOS-008G: production system reference data bootstrap", () => {
   });
 });
 
+describe("CTOS-008H: system reference rows are actually written by load(), not left to persist()", () => {
+  const CANONICAL_AGENT_IDS = Object.values(AGENT_IDS);
+  const IMVUSA_PROJECT_ROW = { id: "proj_imvusa", client_id: "c_imvusa", name: "Imvusa", type: "NEW_WEBSITE", platforms: [], platform_summary: "", domain: null, state: "DISCOVERY", status_label: "Discovery", progress: 0, progress_note: null, current_phase: "DISCOVERY", next_action: "Run discovery", primary_goal: null, has_existing_website: false, notes: null, created_at: null, updated_at: null };
+
+  it("a real project with zero agents: load() alone (no persist() call) emits the agent upserts and leaves the fake DB with 9 rows", async () => {
+    const client = new FakeSupabaseClient();
+    client.tables.set("projects", new Map([["proj_imvusa", IMVUSA_PROJECT_ROW]]));
+    const repo = new SupabaseRepository({ client });
+
+    // load() heals the returned OSData in memory...
+    const loaded = await repo.load();
+    expect(loaded.agents.map((a) => a.id).sort()).toEqual([...CANONICAL_AGENT_IDS].sort());
+
+    // ...AND the persistence layer actually emitted the upserts — no persist() call happened yet.
+    const agentUpserts = client.log.filter((l) => l.op === "upsert" && l.table === "agents");
+    expect(agentUpserts).toHaveLength(1);
+    expect(agentUpserts[0].count).toBe(9);
+    expect(client.tables.get("agents")?.size).toBe(9);
+    expect(client.tables.get("agents")?.get(AGENT_IDS.A01)).toBeTruthy();
+    expect(client.tables.get("agents")?.get(AGENT_IDS.ORCH)).toBeTruthy();
+
+    // No demo U-Proof data was ever inserted; the real Imvusa project is untouched.
+    expect(client.tables.get("clients")?.size ?? 0).toBe(0);
+    expect(client.tables.get("tickets")?.size ?? 0).toBe(0);
+    expect(client.tables.get("projects")?.size).toBe(1);
+    expect(client.tables.get("projects")?.get("proj_imvusa")).toEqual(IMVUSA_PROJECT_ROW);
+  });
+
+  it("a second load() on an already-healed database emits zero further agent upserts (no duplicates)", async () => {
+    const client = new FakeSupabaseClient();
+    client.tables.set("projects", new Map([["proj_imvusa", IMVUSA_PROJECT_ROW]]));
+    const repo1 = new SupabaseRepository({ client });
+    await repo1.load(); // heals + writes
+    client.log.length = 0;
+
+    const repo2 = new SupabaseRepository({ client }); // simulates a fresh page load / new repository instance
+    const reloaded = await repo2.load();
+    expect(reloaded.agents.map((a) => a.id).sort()).toEqual([...CANONICAL_AGENT_IDS].sort());
+    expect(client.log.filter((l) => l.op === "upsert" && l.table === "agents")).toHaveLength(0);
+    expect(client.tables.get("agents")?.size).toBe(9); // still exactly 9
+  });
+
+  it("an operator's agent edit already in the database survives load()'s repair write", async () => {
+    const client = new FakeSupabaseClient();
+    client.tables.set("projects", new Map([["proj_imvusa", IMVUSA_PROJECT_ROW]]));
+    const editedA02 = toRow({ ...productionBootstrapData.agents.find((a) => a.id === AGENT_IDS.A02)!, permissionLevel: "RED" });
+    client.tables.set("agents", new Map([[AGENT_IDS.A02, editedA02]]));
+
+    const repo = new SupabaseRepository({ client });
+    const loaded = await repo.load();
+    expect(loaded.agents).toHaveLength(9); // the other 8 canonical agents were added
+    expect(loaded.agents.find((a) => a.id === AGENT_IDS.A02)?.permissionLevel).toBe("RED"); // never overwritten
+    expect(client.tables.get("agents")?.get(AGENT_IDS.A02)).toEqual(editedA02); // the DB row itself was never re-sent
+    const agentUpserts = client.log.filter((l) => l.op === "upsert" && l.table === "agents");
+    expect(agentUpserts[0].count).toBe(8); // only the 8 missing agents were upserted, not A02
+  });
+
+  it("createJob(agent_01) succeeds by reloading a fresh SupabaseRepository against the already-repaired fake DB", async () => {
+    const client = new FakeSupabaseClient();
+    client.tables.set("projects", new Map([["proj_imvusa", IMVUSA_PROJECT_ROW]]));
+    await new SupabaseRepository({ client }).load(); // first load repairs the database
+
+    const reloaded = await new SupabaseRepository({ client }).load(); // simulates a completely new session
+    const { job } = createJob(reloaded, { projectId: "proj_imvusa", agentId: AGENT_IDS.A01, instructions: "Discovery pass" });
+    expect(job.agentId).toBe(AGENT_IDS.A01);
+    expect(job.status).toBe("QUEUED");
+  });
+});
+
 describe("Supabase repository resilience (review fixes)", () => {
   it("a failed write does not poison the queue and is retried in full next time", async () => {
     const client = new FakeSupabaseClient();

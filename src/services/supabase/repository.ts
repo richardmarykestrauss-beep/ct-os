@@ -9,13 +9,20 @@
  *    audit history. The first `persist()` then writes that bootstrap data. Pass `seed: seedData`
  *    explicitly (tests, a deliberate local demo against a real Supabase project) to get the full
  *    U-Proof demo instead — the default never does this on its own.
- *  - CTOS-008G: when the database is NOT empty (real project/client data already exists),
- *    `load()` still runs `ensureSystemReferenceData()` over whatever it read — idempotently
- *    adding any canonical agent/gate/skill/integration/DOCTRINE row that's missing, without
- *    touching a row that already exists or any client/project/audit content. This self-heals a
- *    database where the bootstrap persist was interrupted (e.g. the first user was still
- *    inactive, pending ADMIN approval) before a real project made the database look "not empty"
- *    to the check above.
+ *  - CTOS-008G/H: when the database is NOT empty (real project/client data already exists),
+ *    `load()` computes any missing canonical agent/gate/skill/integration/DOCTRINE row (see
+ *    `ensureSystemReferenceData`) and writes exactly those rows with a direct, awaited upsert —
+ *    inside `load()` itself, before returning. This self-heals a database where the bootstrap
+ *    persist was interrupted (e.g. the first user was still inactive, pending ADMIN approval)
+ *    before a real project made the database look "not empty" to the check above.
+ *    CTOS-008H: this repair does NOT rely on the generic persist()/diff pipeline. `load()` sets
+ *    `this.known` from the RAW rows it just read (so `agents` starts as an empty baseline when
+ *    the table is genuinely empty) and returns the HEALED OSData to the caller; if the caller's
+ *    own persist-on-mount cycle were the only thing that ever wrote these rows, it would still
+ *    work — but that path is generic, React-render-timing-dependent, and easy to get wrong (an
+ *    earlier version of this fix relied on it and the operator could not verify it actually wrote
+ *    anything). Doing the write explicitly here means the repair is unconditional and testable
+ *    against the repository alone, with no UI/store involved.
  *  - `persist(data)` diffs the snapshot against the last known database state and only upserts
  *    changed/new rows (and deletes removed ids). Writes are serialised and coalesced so bursts
  *    of reducer actions become one round of writes.
@@ -56,6 +63,9 @@ export interface PersistSummary {
   deleted: Partial<Record<TableName, number>>;
   at: string;
 }
+
+/** The OSData keys `ensureSystemReferenceData` can add rows to — kept in sync with data/seed.ts. */
+const SYSTEM_REFERENCE_TABLE_KEYS: (keyof OSData)[] = ["agents", "gates", "skills", "integrations", "sectionLibrary", "knowledgeItems"];
 
 export class SupabaseRepository implements OSRepository {
   readonly kind = "supabase" as const;
@@ -107,7 +117,32 @@ export class SupabaseRepository implements OSRepository {
     }
     // Not empty: self-heal any missing canonical agent/gate/skill/integration/DOCTRINE row (see
     // the class docstring) without touching existing rows or any client/project/audit content.
-    return ensureSystemReferenceData(loaded);
+    const healed = ensureSystemReferenceData(loaded);
+    await this.upsertSystemReferenceGap(loaded, healed);
+    return healed;
+  }
+
+  /**
+   * Writes exactly the rows `ensureSystemReferenceData` added (present in `after`, absent from
+   * `before`, by id) with a direct, awaited upsert — independent of persist()'s diff pipeline.
+   * Updates `this.known` for those rows so a subsequent persist() never re-sends them as
+   * "changed". Never touches a row that already existed in `before`.
+   */
+  private async upsertSystemReferenceGap(before: OSData, after: OSData): Promise<void> {
+    const specs = TABLES.filter((s) => SYSTEM_REFERENCE_TABLE_KEYS.includes(s.key));
+    for (const spec of specs) {
+      const beforeIds = new Set((before[spec.key] as { id: string }[]).map((x) => x.id));
+      const added = (after[spec.key] as { id: string }[]).filter((x) => !beforeIds.has(x.id));
+      if (!added.length) continue;
+      const rows = added.map((e) => toRow(e));
+      for (let i = 0; i < rows.length; i += this.batchSize) {
+        const res = await this.client.from(spec.table).upsert(rows.slice(i, i + this.batchSize), { onConflict: "id" });
+        if (res.error) throw new Error(`Supabase system-reference upsert ${spec.table}: ${res.error.message}`);
+      }
+      const knownMap = this.known.get(spec.table) ?? new Map<string, string>();
+      for (const entity of added) knownMap.set(entity.id, stable(entity));
+      this.known.set(spec.table, knownMap);
+    }
   }
 
   /** Coalesce: if several persists arrive while one is in flight, only the latest snapshot is written next. */
