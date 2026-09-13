@@ -27,3 +27,6 @@ benchmark-runs/
 *.sqlite
 *.sqlite3
 *.db
+
+.vercel
+.env*
