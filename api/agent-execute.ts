@@ -19,7 +19,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createNodeGatewayHandler } from "../src/gateway/node";
+import { createNodeGatewayHandler } from "../src/gateway/node.js";
 
 export const config = { runtime: "nodejs" };
 

@@ -7,7 +7,7 @@
  * which an Edge runtime does not provide (see vercel.json).
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { captureSite, MAX_PAGES } from "../src/gateway/site-capture";
+import { captureSite, MAX_PAGES } from "../src/gateway/site-capture.js";
 
 export const config = { runtime: "nodejs" };
 

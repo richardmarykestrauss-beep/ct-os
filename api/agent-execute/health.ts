@@ -6,7 +6,7 @@
  * "/health", which Vercel already gives it verbatim, so nothing here is duplicated or rewritten.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createNodeGatewayHandler } from "../../src/gateway/node";
+import { createNodeGatewayHandler } from "../../src/gateway/node.js";
 
 export const config = { runtime: "nodejs" };
 
